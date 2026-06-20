@@ -1,0 +1,252 @@
+{
+  "entities": {
+    "Organization": {
+      "title": "Organization",
+      "description": "Represents a company or institution using the GPS tracking system.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "sector": { "type": "string", "description": "Business sector (e.g., Education, Corporate, Logistics)." },
+        "mobile": { "type": "string" },
+        "email": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "billing": {
+          "type": "object",
+          "properties": {
+            "price": { "type": "number" },
+            "gstPercent": { "type": "number" },
+            "gstAmount": { "type": "number" },
+            "totalAmount": { "type": "number" },
+            "initialPayment": { "type": "number" },
+            "paymentMode": { "type": "string", "enum": ["cash", "upi", "bank", "cheque", "others"] },
+            "transactionId": { "type": "string" },
+            "note": { "type": "string" }
+          }
+        },
+        "subscriptionPlan": { "type": "string", "enum": ["basic", "pro", "enterprise"] },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "onboardDate": { "type": "string", "format": "date-time" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "address": { "type": "string" },
+        "eduType": { "type": "string", "enum": ["School", "College"] },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "subscriptionPlan", "status"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment transaction history for a client.",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "paymentMode": { "type": "string", "enum": ["cash", "upi", "bank", "cheque", "others"] },
+        "transactionId": { "type": "string" },
+        "note": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["amount", "paymentMode", "timestamp"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User account within the system, can be Super Admin, Org Admin, Driver, or Passenger.",
+      "type": "object",
+      "properties": {
+        "orgId": { "type": "string", "description": "Reference to Organization. Null for Super Admin." },
+        "role": { "type": "string", "enum": ["super_admin", "org_admin", "driver", "user"] },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "routeId": { "type": "string", "description": "Assigned route for Users/Drivers." },
+        "pickupPointId": { "type": "string", "description": "Specific pickup point for Users." },
+        "vehicleId": { "type": "string", "description": "Assigned vehicle for Drivers." },
+        "classId": { "type": "string", "description": "Assigned class/group for Users (Students)." },
+        "section": { "type": "string", "description": "Assigned section for Users (Students)." },
+        "fcmToken": { "type": "string", "description": "Token for push notifications." },
+        "notifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "message": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "type": { "type": "string" }
+            }
+          }
+        }
+      },
+      "required": ["role", "name", "email"]
+    },
+    "OrgClass": {
+      "title": "OrgClass",
+      "description": "A class or group defined within an organization (e.g., Class 10, MCA).",
+      "type": "object",
+      "properties": {
+        "orgId": { "type": "string" },
+        "name": { "type": "string" },
+        "sections": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "List of sections in this class."
+        }
+      },
+      "required": ["orgId", "name"]
+    },
+    "Route": {
+      "title": "Route",
+      "description": "A defined path with multiple pickup points.",
+      "type": "object",
+      "properties": {
+        "orgId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["orgId", "name"]
+    },
+    "PickupPoint": {
+      "title": "PickupPoint",
+      "description": "A specific location along a route where users are picked up.",
+      "type": "object",
+      "properties": {
+        "routeId": { "type": "string" },
+        "orgId": { "type": "string" },
+        "name": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "order": { "type": "number", "description": "Sequence in the route." }
+      },
+      "required": ["routeId", "orgId", "name", "location", "order"]
+    },
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Tracking hardware or physical bus/car.",
+      "type": "object",
+      "properties": {
+        "orgId": { "type": "string" },
+        "plateNumber": { "type": "string" },
+        "model": { "type": "string" },
+        "status": { "type": "string", "enum": ["idle", "active", "maintenance"] }
+      },
+      "required": ["orgId", "plateNumber", "status"]
+    },
+    "Trip": {
+      "title": "Trip",
+      "description": "An active or historical journey of a vehicle on a route.",
+      "type": "object",
+      "properties": {
+        "orgId": { "type": "string" },
+        "routeId": { "type": "string" },
+        "driverId": { "type": "string" },
+        "vehicleId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "ongoing", "completed", "cancelled"] },
+        "direction": { "type": "string", "enum": ["pickup", "dropoff"], "description": "pickup = Home to Org, dropoff = Org to Home" },
+        "currentStopId": { "type": "string", "description": "ID of the current/next stop." },
+        "currentLocation": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orgId", "routeId", "driverId", "vehicleId", "status", "direction"]
+    },
+    "TripAttendance": {
+      "title": "TripAttendance",
+      "description": "Recording pick/drop status for users during a trip.",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string" },
+        "userId": { "type": "string" },
+        "pickupPointId": { "type": "string" },
+        "status": { "type": "string", "enum": ["waiting", "picked", "dropped", "absent"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tripId", "userId", "status"]
+    },
+    "SystemLog": {
+      "title": "SystemLog",
+      "description": "Audit trail for system-wide actions.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "timestamp"]
+    },
+    "GlobalSettings": {
+      "title": "GlobalSettings",
+      "description": "System-wide settings such as organization sectors.",
+      "type": "object",
+      "properties": {
+        "sectors": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "List of available organization sectors/types."
+        }
+      }
+    }
+  },
+  "firestore": {
+    "organizations": {
+      "schema": "Organization",
+      "description": "Master list of organizations."
+    },
+    "users": {
+      "schema": "User",
+      "description": "System-wide users with role-based attributes."
+    },
+    "routes": {
+      "schema": "Route",
+      "description": "Routes defined within organizations."
+    },
+    "routes/{routeId}/pickupPoints": {
+      "schema": "PickupPoint",
+      "description": "Points along a specific route."
+    },
+    "vehicles": {
+      "schema": "Vehicle",
+      "description": "Vehicles registered to organizations."
+    },
+    "trips": {
+      "schema": "Trip",
+      "description": "Active and past trips for real-time tracking."
+    },
+    "trips/{tripId}/attendance": {
+      "schema": "TripAttendance",
+      "description": "User-level tracking within a specific trip."
+    },
+    "logs": {
+      "schema": "SystemLog",
+      "description": "Audit trail for Super Admin actions."
+    },
+    "organizations/{orgId}/payments": {
+      "schema": "Payment",
+      "description": "Transaction history for a specific organization."
+    },
+    "organizations/{orgId}/classes": {
+      "schema": "OrgClass",
+      "description": "Classes or groups defined within a specific organization."
+    },
+    "settings": {
+      "schema": "GlobalSettings",
+      "description": "System-wide configuration data."
+    }
+  }
+}

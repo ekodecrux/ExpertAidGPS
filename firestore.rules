@@ -1,0 +1,179 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // --- Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email.lower() == 'ravikumarpendyala9182@gmail.com' ||
+        request.auth.token.get('role', '') == 'super_admin' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'super_admin')
+      );
+    }
+
+    function isOrgAdmin() {
+      return isSignedIn() && (
+        request.auth.token.get('role', '') == 'org_admin' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'org_admin')
+      );
+    }
+
+    function getUserOrgId() {
+      return request.auth.token.get('orgId', get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('orgId', null));
+    }
+
+    function isDriver() {
+      return isSignedIn() && (
+        request.auth.token.get('role', '') == 'driver' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'driver')
+      );
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || isOrgAdmin();
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidOrganization(data) {
+      return (data.get('name', '') is string) &&
+             (data.get('mobile', '') is string) &&
+             (data.get('email', '') is string) &&
+             (data.get('subscriptionPlan', 'basic') in ['basic', 'pro', 'enterprise']) &&
+             (data.get('status', 'active') in ['active', 'suspended']) &&
+             (!data.keys().contains('billing') || data.billing is map) &&
+             (!data.keys().contains('onboardDate') || data.onboardDate == null || data.onboardDate is timestamp) &&
+             (!data.keys().contains('expiryDate') || data.expiryDate == null || data.expiryDate is timestamp);
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['amount', 'paymentMode', 'timestamp']) &&
+             data.amount is number &&
+             data.paymentMode in ['cash', 'upi', 'bank', 'cheque', 'others'] &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'name', 'role']) &&
+             data.uid == request.auth.uid &&
+             data.role in ['super_admin', 'org_admin', 'driver', 'user'];
+    }
+
+    function isValidRoute(data) {
+      return data.keys().hasAll(['orgId', 'name', 'description']) &&
+             data.orgId is string && isValidId(data.orgId) &&
+             data.name is string && data.name.size() <= 100;
+    }
+
+    function isValidVehicle(data) {
+      return (data.get('orgId', null) == null || data.orgId is string) &&
+             (data.get('plateNumber', null) == null || data.plateNumber is string) &&
+             (data.get('status', 'idle') in ['idle', 'active', 'maintenance', 'on-trip', 'live']) &&
+             (!data.keys().contains('location') || (data.location is map)) &&
+             (!data.keys().contains('updatedAt') || data.updatedAt == null || data.updatedAt is timestamp);
+    }
+
+    function isValidTrip(data) {
+      return (data.get('orgId', null) == null || data.orgId is string) &&
+             (data.get('routeId', null) == null || data.routeId is string) &&
+             (data.get('driverId', null) == null || data.driverId is string) &&
+             (data.get('vehicleId', null) == null || data.vehicleId is string) &&
+             (data.get('direction', 'pickup') == 'pickup' || data.get('direction', 'pickup') == 'dropoff') &&
+             (data.get('status', 'pending') == 'pending' || data.get('status', 'pending') == 'ongoing' || data.get('status', 'pending') == 'completed' || data.get('status', 'pending') == 'cancelled' || data.get('status', 'pending') == 'live') &&
+             (!data.keys().contains('startTime') || data.startTime == null || data.startTime is timestamp) &&
+             (!data.keys().contains('endTime') || data.endTime == null || data.endTime is timestamp) &&
+             (!data.keys().contains('startedAt') || data.startedAt == null || data.startedAt is timestamp) &&
+             (!data.keys().contains('endedAt') || data.endedAt == null || data.endedAt is timestamp) &&
+             (!data.keys().contains('updatedAt') || data.updatedAt == null || data.updatedAt is timestamp) &&
+             (!data.keys().contains('currentStopId') || data.currentStopId == null || data.currentStopId is string) &&
+             (!data.keys().contains('currentLocation') || data.currentLocation == null || (data.currentLocation is map));
+    }
+
+    function isValidClass(data) {
+      return (!data.keys().contains('name') || (data.name is string && data.name.size() > 0)) &&
+             (!data.keys().contains('sections') || (data.sections is list));
+    }
+
+    // --- Rules ---
+
+    match /organizations/{orgId} {
+      allow get: if isSignedIn() && isValidId(orgId);
+      allow list: if isSuperAdmin();
+      allow create: if isSuperAdmin() && isValidId(orgId) && isValidOrganization(incoming());
+      allow update: if (isSuperAdmin() || (isOrgAdmin() && getUserOrgId() == orgId)) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'subscriptionPlan', 'name', 'mobile', 'email', 'logoUrl', 'billing', 'sector', 'onboardDate', 'expiryDate', 'totalPaidAmount', 'address', 'eduType', 'location', 'updatedAt'])
+      );
+      allow delete: if isSuperAdmin();
+
+      match /payments/{paymentId} {
+        allow read, write: if isSuperAdmin();
+      }
+
+      match /classes/{classId} {
+        allow read: if isSignedIn() && (isSuperAdmin() || getUserOrgId() == orgId);
+        allow create: if (isSuperAdmin() || (isOrgAdmin() && getUserOrgId() == orgId)) && isValidClass(incoming());
+        allow update: if (isSuperAdmin() || (isOrgAdmin() && getUserOrgId() == orgId)) && 
+                        isValidClass(incoming()) && 
+                        (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'sections', 'updatedAt']));
+        allow delete: if isSuperAdmin() || (isOrgAdmin() && getUserOrgId() == orgId);
+      }
+    }
+
+    match /logs/{logId} {
+      allow list, get, create: if isSuperAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /routes/{routeId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+
+      match /pickupPoints/{pointId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
+      }
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /trips/{tripId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+
+      match /attendance/{atId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
+      }
+    }
+  }
+}

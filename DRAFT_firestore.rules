@@ -1,0 +1,131 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.email == 'ravikumarpendyala9182@gmail.com';
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (isSignedIn() && getUserData().role == 'org_admin');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Helpers ---
+
+    function isValidOrganization(data) {
+      return data.keys().hasAll(['name', 'subscriptionPlan', 'status']) &&
+             data.keys().size() == 3 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.subscriptionPlan in ['basic', 'pro', 'enterprise'] &&
+             data.status in ['active', 'suspended'];
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['role', 'name', 'email']) &&
+             data.role in ['super_admin', 'org_admin', 'driver', 'user'] &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email == request.auth.token.email;
+    }
+
+    function isValidRoute(data) {
+      return data.keys().hasAll(['orgId', 'name']) &&
+             data.orgId is string &&
+             data.name is string && data.name.size() <= 100;
+    }
+
+    function isValidVehicle(data) {
+      return data.keys().hasAll(['orgId', 'plateNumber', 'status']) &&
+             data.orgId is string &&
+             data.plateNumber is string && data.plateNumber.size() <= 20 &&
+             data.status in ['idle', 'active', 'maintenance'];
+    }
+
+    function isValidTrip(data) {
+      return data.keys().hasAll(['orgId', 'routeId', 'driverId', 'vehicleId', 'status']) &&
+             data.orgId is string &&
+             data.routeId is string &&
+             data.driverId is string &&
+             data.vehicleId is string &&
+             data.status in ['pending', 'ongoing', 'completed', 'cancelled'];
+    }
+
+    // --- Rules ---
+
+    match /organizations/{orgId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSuperAdmin() && isValidOrganization(incoming());
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatarUrl', 'fcmToken'])) ||
+        isSuperAdmin()
+      );
+    }
+
+    match /routes/{routeId} {
+      allow read: if isSignedIn() && (getUserData().orgId == resource.data.orgId || isSuperAdmin());
+      allow create: if isAdmin() && isValidRoute(incoming());
+      allow update: if isAdmin() && getUserData().orgId == resource.data.orgId && isValidRoute(incoming());
+      allow delete: if isAdmin() && getUserData().orgId == resource.data.orgId;
+
+      match /pickupPoints/{pointId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if isSignedIn() && (getUserData().orgId == resource.data.orgId || isSuperAdmin());
+      allow create: if isAdmin() && isValidVehicle(incoming());
+      allow update: if (isAdmin() || (getUserData().role == 'driver' && incoming().diff(existing()).affectedKeys().hasOnly(['status'])))
+                    && getUserData().orgId == resource.data.orgId;
+    }
+
+    match /trips/{tripId} {
+      allow read: if isSignedIn() && (getUserData().orgId == resource.data.orgId || isSuperAdmin());
+      allow create: if isAdmin() && isValidTrip(incoming());
+      allow update: if (
+        isAdmin() || 
+        (getUserData().role == 'driver' && existing().driverId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'currentLocation', 'updatedAt']))
+      ) && getUserData().orgId == resource.data.orgId;
+
+      match /attendance/{atId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin() || (getUserData().role == 'driver');
+      }
+    }
+  }
+}

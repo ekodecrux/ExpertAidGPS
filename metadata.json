@@ -1,0 +1,11 @@
+{
+  "name": "Remix: ExpertAidGPS",
+  "description": "Professional Transport Intelligence Platform - Real-time fleet monitoring, route management, and specialized dashboards for School, Staff, and Enterprise logistics.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
