@@ -56,41 +56,97 @@ export default function AppShell({ children }: ShellProps) {
   };
 
   React.useEffect(() => {
-    if (!userData || (userData.role !== 'org_admin' && userData.role !== 'super_admin')) return;
+    if (!userData) return;
 
-    // Listen to routes
-    const unsubRoutes = onSnapshot(collection(db, 'routes'), (snapshot) => {
-      const rList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      const filtered = userData.role === 'super_admin' ? rList : rList.filter((r: any) => r.orgId === userData.orgId);
-      setRoutes(filtered);
-    }, (error) => {
-      console.warn("Routes snapshot read sidelined:", error);
-    });
+    // 1. Set up Firestore Real-time subscriptions if available / when authorized.
+    let unsubRoutes = () => {};
+    let unsubUsers = () => {};
+    let unsubTrips = () => {};
 
-    // Listen to users
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const uList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      const filtered = userData.role === 'super_admin' ? uList : uList.filter((u: any) => u.orgId === userData.orgId);
-      setUsers(filtered);
-    }, (error) => {
-      console.warn("Users snapshot read sidelined:", error);
-    });
+    if (userData.role === 'org_admin' || userData.role === 'super_admin') {
+      try {
+        unsubRoutes = onSnapshot(collection(db, 'routes'), (snapshot) => {
+          const rList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          const filtered = userData.role === 'super_admin' ? rList : rList.filter((r: any) => r.orgId === userData.orgId);
+          setRoutes(filtered);
+        }, (error) => {
+          console.warn("Routes snapshot read sidelined:", error);
+        });
 
-    // Listen to trips
-    const unsubTrips = onSnapshot(collection(db, 'trips'), (snapshot) => {
-      const tList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      const filtered = userData.role === 'super_admin' ? tList : tList.filter((t: any) => t.orgId === userData.orgId);
-      setTrips(filtered);
-    }, (error) => {
-      console.warn("Trips snapshot read sidelined:", error);
-    });
+        unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+          const uList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          const filtered = userData.role === 'super_admin' ? uList : uList.filter((u: any) => u.orgId === userData.orgId);
+          setUsers(filtered);
+        }, (error) => {
+          console.warn("Users snapshot read sidelined:", error);
+        });
+
+        unsubTrips = onSnapshot(collection(db, 'trips'), (snapshot) => {
+          const tList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          const filtered = userData.role === 'super_admin' ? tList : tList.filter((t: any) => t.orgId === userData.orgId);
+          setTrips(filtered);
+        }, (error) => {
+          console.warn("Trips snapshot read sidelined:", error);
+        });
+      } catch (fsErr) {
+        console.warn("Firestore listener initialization bypassed/failed. Standard MySQL Relational polling active.");
+      }
+    }
+
+    // 2. High-Performance MySQL Sync Engine Polling Fallback (100% Standalone survival without Firestore)
+    const fetchMySQLBackup = async () => {
+      try {
+        let token = await firebaseAuth.currentUser?.getIdToken(true).catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
+        if (!token) return;
+
+        const isAdmin = userData.role === "org_admin" || userData.role === "super_admin";
+        const endpoint = isAdmin ? "/api/records/admin-data" : "/api/records/user-data";
+
+        const res = await fetch(endpoint, {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success) {
+            if (isAdmin) {
+              if (result.routes) setRoutes(result.routes);
+              if (result.users) setUsers(result.users);
+              if (result.trips) setTrips(result.trips);
+              if (result.organizations && userData.orgId) {
+                const myOrg = result.organizations.find((o: any) => o.id === userData.orgId);
+                if (myOrg) setOrg(myOrg);
+              }
+            } else {
+              if (result.routes) setRoutes(result.routes);
+              if (result.users) setUsers(result.users);
+              if (result.trips) setTrips(result.trips);
+              if (result.org) setOrg(result.org);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[AppShell MySQL Sync Polling Bypass]:", err);
+      }
+    };
+
+    // Load instantly
+    fetchMySQLBackup();
+
+    // Poll every 8 seconds for real-time relational map and notifications updates
+    const pollInterval = setInterval(fetchMySQLBackup, 8000);
 
     return () => {
       unsubRoutes();
       unsubUsers();
       unsubTrips();
+      clearInterval(pollInterval);
     };
-  }, [userData?.orgId, userData?.role]);
+  }, [userData?.orgId, userData?.role, userData?.uid]);
 
   const generatedNotifications = React.useMemo(() => {
     if (!userData || (userData.role !== 'org_admin' && userData.role !== 'super_admin')) return [];

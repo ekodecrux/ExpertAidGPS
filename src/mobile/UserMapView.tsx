@@ -610,8 +610,8 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
           {/* HUB / Organization */}
           {org?.location && isValidCoordinate(org.location.lat, org.location.lng) && (
             <Marker 
-              key="user-org-marker"
-              position={[org.location.lat, org.location.lng]} 
+              key={`user-org-marker-${parseFloat(org.location.lat)}-${parseFloat(org.location.lng)}`}
+              position={[parseFloat(org.location.lat), parseFloat(org.location.lng)]} 
               icon={createMarkerIcon(
                 org?.sector === 'Education' ? (org?.eduType === 'College' ? '#6366f1' : '#4f46e5') : '#0f172a', 
                 orgIconUrl, 
@@ -624,8 +624,8 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
           {/* ACTIVE VEHICLE / BUS */}
           {vehicle?.location && isValidCoordinate(vehicle.location.lat, vehicle.location.lng) && (
             <Marker 
-              key="user-bus-marker"
-              position={[vehicle.location.lat, vehicle.location.lng]} 
+              key={`user-bus-marker-${parseFloat(vehicle.location.lat)}-${parseFloat(vehicle.location.lng)}`}
+              position={[parseFloat(vehicle.location.lat), parseFloat(vehicle.location.lng)]} 
               icon={createMarkerIcon('#2563eb', getLocalIcon('bus'), '#3b82f6', `BUS: ${vehicle.plateNumber || 'ACTIVE'}`)} 
             />
           )}
@@ -643,8 +643,8 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
 
             return isValidCoordinate(p.lat, p.lng) && (
               <Marker 
-                key={p.id} 
-                position={[p.lat, p.lng]} 
+                key={`stop-${p.id}-${parseFloat(p.lat)}-${parseFloat(p.lng)}-${color}`} 
+                position={[parseFloat(p.lat), parseFloat(p.lng)]} 
                 icon={createMarkerIcon(color, icon, color, label)}
               >
                 <Popup>

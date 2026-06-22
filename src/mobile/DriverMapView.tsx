@@ -1061,8 +1061,8 @@ export default function DriverMapView({
 
           {org?.location && isValidCoordinate(org.location.lat, org.location.lng) && (
             <Marker 
-              key="driver-org-marker"
-              position={[org.location.lat, org.location.lng]} 
+              key={`driver-org-marker-${parseFloat(org.location.lat)}-${parseFloat(org.location.lng)}`}
+              position={[parseFloat(org.location.lat), parseFloat(org.location.lng)]} 
               icon={createMarkerIcon(activeTrip?.currentStopId === 'ORG' ? '#2563eb' : '#f97316', orgIconUrl, activeTrip?.currentStopId === 'ORG' ? '#2563eb' : '#f97316', org?.name || 'OFFICE')} 
             />
           )}
@@ -1083,8 +1083,8 @@ export default function DriverMapView({
             
             return isValidCoordinate(p.lat, p.lng) && (
               <Marker 
-                key={p.id} 
-                position={[p.lat, p.lng]} 
+                key={`stop-${p.id}-${parseFloat(p.lat)}-${parseFloat(p.lng)}-${markerColor}`} 
+                position={[parseFloat(p.lat), parseFloat(p.lng)]} 
                 icon={createMarkerIcon(
                   markerColor, 
                   getLocalIcon('bus-stop'), 
@@ -1103,8 +1103,8 @@ export default function DriverMapView({
             .filter((v: any) => v && v.id === trackingVehicleId)
             .map((v: any) => v.location && isValidCoordinate(v.location.lat, v.location.lng) && (
               <Marker 
-                key={v.id} 
-                position={[v.location.lat, v.location.lng]} 
+                key={`bus-${v.id}-${parseFloat(v.location.lat)}-${parseFloat(v.location.lng)}`} 
+                position={[parseFloat(v.location.lat), parseFloat(v.location.lng)]} 
                 icon={createMarkerIcon(
                   '#2563eb', 
                   getLocalIcon('bus'), 

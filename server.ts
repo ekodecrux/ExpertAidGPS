@@ -586,7 +586,8 @@ async function start() {
           connectionLimit: 15,
           queueLimit: 0,
           enableKeepAlive: true,
-          keepAliveInitialDelay: 10000
+          keepAliveInitialDelay: 10000,
+          connectTimeout: 2000
         });
 
         // Run schema structure verification on the first connection from the pool
