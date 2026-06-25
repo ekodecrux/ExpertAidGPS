@@ -8,19 +8,23 @@ import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { doc, onSnapshot, collection, query, where, addDoc, updateDoc, setDoc, serverTimestamp, getDocs, getDoc, arrayUnion } from 'firebase/firestore';
-import { saveMySQLRecord } from '../lib/mysql';
+import { saveMySQLRecord, saveMySQLRecordsBatch } from '../lib/mysql';
 
 export default function DriverMapView({ 
   activeTrip,
+  setActiveTrip,
   isSelectingRoute,
   setIsSelectingRoute,
   driverData,
+  setDriverData,
   driverDataLoading
 }: { 
   activeTrip: any;
+  setActiveTrip?: (v: any) => void;
   isSelectingRoute: boolean;
   setIsSelectingRoute: (v: boolean) => void;
   driverData?: any;
+  setDriverData?: (v: any) => void;
   driverDataLoading?: boolean;
 }) {
   const { userData } = useAuth();
@@ -422,30 +426,82 @@ export default function DriverMapView({
 
         if (nextPendingStop) {
           try {
-            await updateDoc(doc(db, 'trips', activeTrip.id), {
-              currentStopId: nextPendingStop.id
-            });
-            await saveMySQLRecord('update', 'trips', activeTrip.id, {
-              currentStopId: nextPendingStop.id
-            });
+            // Optimistic local state updates to prevent delayed render loops
+            if (setActiveTrip) {
+              setActiveTrip({
+                ...activeTrip,
+                currentStopId: nextPendingStop.id
+              });
+            }
+            if (setDriverData && driverData) {
+              const updatedTrips = (driverData.trips || []).map((t: any) => {
+                if (t && t.id === activeTrip.id) {
+                  return { ...t, currentStopId: nextPendingStop.id };
+                }
+                return t;
+              });
+              setDriverData({
+                ...driverData,
+                trips: updatedTrips
+              });
+            }
+
             toast.success(`Advancing to next stop: ${nextPendingStop.name}`, { id: `auto-advance-${currentStopId}` });
+
+            // Run database writes concurrently in background
+            Promise.all([
+              updateDoc(doc(db, 'trips', activeTrip.id), {
+                currentStopId: nextPendingStop.id
+              }),
+              saveMySQLRecord('update', 'trips', activeTrip.id, {
+                currentStopId: nextPendingStop.id
+              })
+            ]).catch((err) => {
+              console.warn("[AutoAdvance] background write failed:", err);
+            });
           } catch (e) {
             console.error("Error auto-advancing stop:", e);
           }
         } else {
           // If no more pending stops at all, navigate to ORG!
           try {
-            await updateDoc(doc(db, 'trips', activeTrip.id), {
-              currentStopId: 'ORG'
-            });
-            await saveMySQLRecord('update', 'trips', activeTrip.id, {
-              currentStopId: 'ORG'
-            });
+            // Optimistic local state updates
+            if (setActiveTrip) {
+              setActiveTrip({
+                ...activeTrip,
+                currentStopId: 'ORG'
+              });
+            }
+            if (setDriverData && driverData) {
+              const updatedTrips = (driverData.trips || []).map((t: any) => {
+                if (t && t.id === activeTrip.id) {
+                  return { ...t, currentStopId: 'ORG' };
+                }
+                return t;
+              });
+              setDriverData({
+                ...driverData,
+                trips: updatedTrips
+              });
+            }
+
             if (direction === 'pickup') {
               toast.success("All stops completed! Returning to base.", { id: 'auto-advance-org' });
             } else {
               toast.success("All drops completed! Returning to base.", { id: 'auto-advance-finished' });
             }
+
+            // Run database writes concurrently in background
+            Promise.all([
+              updateDoc(doc(db, 'trips', activeTrip.id), {
+                currentStopId: 'ORG'
+              }),
+              saveMySQLRecord('update', 'trips', activeTrip.id, {
+                currentStopId: 'ORG'
+              })
+            ]).catch((err) => {
+              console.warn("[AutoAdvance to ORG] background write failed:", err);
+            });
           } catch (e) {
             console.error("Error auto-advancing to ORG:", e);
           }
@@ -616,9 +672,9 @@ export default function DriverMapView({
       toast.loading("Initializing trip...", { id: 'start-trip' });
       const tripId = `TRIP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-      // Reset statuses in MySQL for starting trip direction to waiting
+      // Reset statuses in MySQL for starting trip direction to waiting in a single fast batch!
       const isPickup = tripType === 'pickup';
-      const resetPromises = manifest.map(async (m) => {
+      const batchOps = manifest.map((m) => {
         const resetData: any = {};
         if (isPickup) {
           resetData.pickupStatus = 'waiting';
@@ -627,13 +683,13 @@ export default function DriverMapView({
           resetData.dropoffStatus = 'waiting';
           resetData.dropoffUpdatedAt = null;
         }
-        try {
-          await saveMySQLRecord('update', 'users', m.uid || m.id, resetData);
-        } catch (e) {
-          console.warn("Failed resetting passenger status at trip start:", e);
-        }
+        return {
+          operation: 'update' as const,
+          table: 'users',
+          id: m.uid || m.id,
+          data: resetData
+        };
       });
-      await Promise.all(resetPromises);
 
       // Create a clean manifest based on the direction resetting
       const cleanManifest = manifest.map((m) => ({
@@ -645,18 +701,41 @@ export default function DriverMapView({
       }));
       setManifest(cleanManifest);
 
-      // Synchronize with MySQL database instantly as primary data store!
-      await saveMySQLRecord('insert', 'trips', tripId, {
+      const vehicleId = userData.vehicleId || 'DEV-V1';
+
+      // Determine the first stop with pending members in the sorted order
+      let initialStopId: any = null;
+      if (currentRoute?.pickupPoints && currentRoute.pickupPoints.length > 0) {
+        const sortedPoints = getSortedStops(currentRoute.pickupPoints, null, tripType);
+        for (const p of sortedPoints) {
+          if (isValidCoordinate(p.lat, p.lng)) {
+            const stopMembers = cleanManifest.filter(u => String(u.pickupPointId) === String(p.id));
+            const targetStatus = tripType === 'dropoff' ? 'dropped' : 'picked';
+            const allHandled = stopMembers.length === 0 || stopMembers.every(u => u.status === targetStatus || u.status === 'absent');
+            if (!allHandled) {
+              initialStopId = p.id;
+              break;
+            }
+          }
+        }
+        if (!initialStopId && sortedPoints.length > 0) {
+          initialStopId = sortedPoints[0].id;
+        }
+      }
+
+      // Construct local trip object
+      const newTrip = {
+        id: tripId,
         orgId: userData.orgId,
         routeId: selectedRouteId,
         driverId: userData.id || userData.uid,
-        vehicleId: userData.vehicleId || 'DEV-V1',
+        vehicleId: vehicleId,
         status: 'live',
         direction: tripType,
         startTime: new Date().toISOString(),
         currentLat: org?.location?.lat || 0,
         currentLng: org?.location?.lng || 0,
-        currentStopId: null,
+        currentStopId: initialStopId,
         manifest: JSON.stringify(
           cleanManifest.map((m) => ({
             uid: m.uid || m.id,
@@ -669,36 +748,77 @@ export default function DriverMapView({
             pickupPointId: m.pickupPointId,
           }))
         )
-      });
+      };
 
-      // Best-effort write to Firestore of generated ID
-      try {
-        await setDoc(doc(db, 'trips', tripId), {
-          orgId: userData.orgId,
-          routeId: selectedRouteId,
-          driverId: userData.id || userData.uid,
-          vehicleId: userData.vehicleId || 'DEV-V1',
-          status: 'live',
-          direction: tripType,
-          startTime: serverTimestamp(),
-          currentLocation: { lat: org?.location?.lat || 0, lng: org?.location?.lng || 0 },
-          currentStopId: null
-        });
-      } catch (fErr) {
-        console.warn("Firestore sync trip initialization sidelined:", fErr);
+      // 1. Instantly trigger optimistic UI updates
+      if (setActiveTrip) {
+        setActiveTrip(newTrip);
       }
-
-      const vehicleId = userData.vehicleId || 'DEV-V1';
-      await saveMySQLRecord('update', 'vehicles', vehicleId, { status: 'on-trip' });
-      
-      try {
-        await updateDoc(doc(db, 'vehicles', vehicleId), { status: 'on-trip' });
-      } catch (fErr) {
-        console.warn("Firestore vehicle status update sidelined:", fErr);
+      if (setDriverData && driverData) {
+        const updatedTrips = [...(driverData.trips || []).filter((t: any) => t && t.id !== tripId), newTrip];
+        setDriverData({
+          ...driverData,
+          trips: updatedTrips
+        });
       }
 
       setIsSelectingRoute(false);
       toast.success("Trip engaged successfully!", { id: 'start-trip' });
+
+      // 2. Perform database writes in the background concurrently
+      Promise.all([
+        saveMySQLRecordsBatch(batchOps).catch((err) => {
+          console.warn("[StartTrip] MySQL reset statuses batch failed:", err.message);
+        }),
+        saveMySQLRecord('insert', 'trips', tripId, {
+          orgId: userData.orgId,
+          routeId: selectedRouteId,
+          driverId: userData.id || userData.uid,
+          vehicleId: vehicleId,
+          status: 'live',
+          direction: tripType,
+          startTime: new Date().toISOString(),
+          currentLat: org?.location?.lat || 0,
+          currentLng: org?.location?.lng || 0,
+          currentStopId: initialStopId,
+          manifest: JSON.stringify(
+            cleanManifest.map((m) => ({
+              uid: m.uid || m.id,
+              studentId: m.studentId || "",
+              name: m.name,
+              pickupStatus: m.pickupStatus,
+              dropoffStatus: m.dropoffStatus,
+              pickupUpdatedAt: m.pickupUpdatedAt,
+              dropoffUpdatedAt: m.dropoffUpdatedAt,
+              pickupPointId: m.pickupPointId,
+            }))
+          )
+        }).catch((err) => {
+          console.warn("[StartTrip] MySQL trip insert failed:", err.message);
+        }),
+        setDoc(doc(db, 'trips', tripId), {
+          orgId: userData.orgId,
+          routeId: selectedRouteId,
+          driverId: userData.id || userData.uid,
+          vehicleId: vehicleId,
+          status: 'live',
+          direction: tripType,
+          startTime: serverTimestamp(),
+          currentLocation: { lat: org?.location?.lat || 0, lng: org?.location?.lng || 0 },
+          currentStopId: initialStopId
+        }).catch((err) => {
+          console.warn("[StartTrip] Firestore trip set failed:", err.message);
+        }),
+        saveMySQLRecord('update', 'vehicles', vehicleId, { status: 'on-trip' }).catch((err) => {
+          console.warn("[StartTrip] MySQL vehicle status update failed:", err.message);
+        }),
+        updateDoc(doc(db, 'vehicles', vehicleId), { status: 'on-trip' }).catch((err) => {
+          console.warn("[StartTrip] Firestore vehicle status update failed:", err.message);
+        })
+      ]).then(() => {
+        console.log("[StartTrip] Background writes finished.");
+      });
+
     } catch (e) {
       console.error("Error starting trip:", e);
       toast.error("Failed to start trip", { id: 'start-trip' });
@@ -713,14 +833,40 @@ export default function DriverMapView({
     }
     
     try {
-      await updateDoc(doc(db, 'trips', activeTrip.id), {
-        currentStopId: stopId
-      });
-      await saveMySQLRecord('update', 'trips', activeTrip.id, {
-        currentStopId: stopId
-      });
+      // 1. Optimistic local updates to prevent endless useEffect loops
+      if (setActiveTrip) {
+        setActiveTrip({
+          ...activeTrip,
+          currentStopId: stopId
+        });
+      }
+      if (setDriverData && driverData) {
+        const updatedTrips = (driverData.trips || []).map((t: any) => {
+          if (t && t.id === activeTrip.id) {
+            return { ...t, currentStopId: stopId };
+          }
+          return t;
+        });
+        setDriverData({
+          ...driverData,
+          trips: updatedTrips
+        });
+      }
+
       setSelectedStopId(null); // Close modal when manual target set
       toast.success("Tracking new target stop", { id: 'stop-update' });
+
+      // 2. Perform database writes in the background
+      Promise.all([
+        updateDoc(doc(db, 'trips', activeTrip.id), {
+          currentStopId: stopId
+        }),
+        saveMySQLRecord('update', 'trips', activeTrip.id, {
+          currentStopId: stopId
+        })
+      ]).catch((err) => {
+        console.warn("[handleUpdateStop] background write failed:", err);
+      });
     } catch (e) {
       console.error("Error updating stop:", e);
     }
@@ -893,45 +1039,66 @@ export default function DriverMapView({
     try {
       toast.loading("Completing trip...", { id: 'end-trip' });
 
-      // 1. Update MySQL primarily
-      await saveMySQLRecord('update', 'trips', activeTrip.id, {
-        status: 'completed',
-        endTime: new Date().toISOString(),
-        manifest: JSON.stringify(
-          manifest.map((m) => ({
-            uid: m.uid || m.id,
-            studentId: m.studentId || "",
-            name: m.name,
-            pickupStatus: m.pickupStatus || "waiting",
-            dropoffStatus: m.dropoffStatus || "waiting",
-            pickupUpdatedAt: m.pickupUpdatedAt || null,
-            dropoffUpdatedAt: m.dropoffUpdatedAt || null,
-            pickupPointId: m.pickupPointId,
-          }))
-        )
-      });
       const vehicleId = activeTrip.vehicleId || userData?.vehicleId || 'DEV-V1';
-      await saveMySQLRecord('update', 'vehicles', vehicleId, { status: 'active' });
 
-      // 2. Best-effort update Firestore
-      try {
-        await updateDoc(doc(db, 'trips', activeTrip.id), {
-          status: 'completed',
-          endTime: serverTimestamp()
-        });
-      } catch (fErr) {
-        console.warn("Firestore sync trip completion sidelined:", fErr);
+      // 1. Instantly trigger optimistic UI updates
+      if (setActiveTrip) {
+        setActiveTrip(null);
       }
-
-      try {
-        await updateDoc(doc(db, 'vehicles', vehicleId), { status: 'active' });
-      } catch (fErr) {
-        console.warn("Firestore sync vehicle completion sidelined:", fErr);
+      if (setDriverData && driverData) {
+        const updatedTrips = (driverData.trips || []).map((t: any) => {
+          if (t && t.id === activeTrip.id) {
+            return { ...t, status: 'completed', endTime: new Date().toISOString() };
+          }
+          return t;
+        });
+        setDriverData({
+          ...driverData,
+          trips: updatedTrips
+        });
       }
 
       toast.success("Trip completed!", { id: 'end-trip' });
+
+      // 2. Perform database writes in the background concurrently
+      Promise.all([
+        saveMySQLRecord('update', 'trips', activeTrip.id, {
+          status: 'completed',
+          endTime: new Date().toISOString(),
+          manifest: JSON.stringify(
+            manifest.map((m) => ({
+              uid: m.uid || m.id,
+              studentId: m.studentId || "",
+              name: m.name,
+              pickupStatus: m.pickupStatus || "waiting",
+              dropoffStatus: m.dropoffStatus || "waiting",
+              pickupUpdatedAt: m.pickupUpdatedAt || null,
+              dropoffUpdatedAt: m.dropoffUpdatedAt || null,
+              pickupPointId: m.pickupPointId,
+            }))
+          )
+        }).catch((err) => {
+          console.warn("[CompleteTrip] MySQL trip status update failed:", err.message);
+        }),
+        saveMySQLRecord('update', 'vehicles', vehicleId, { status: 'active' }).catch((err) => {
+          console.warn("[CompleteTrip] MySQL vehicle status update failed:", err.message);
+        }),
+        updateDoc(doc(db, 'trips', activeTrip.id), {
+          status: 'completed',
+          endTime: serverTimestamp()
+        }).catch((err) => {
+          console.warn("[CompleteTrip] Firestore trip completion failed:", err.message);
+        }),
+        updateDoc(doc(db, 'vehicles', vehicleId), { status: 'active' }).catch((err) => {
+          console.warn("[CompleteTrip] Firestore vehicle completion failed:", err.message);
+        })
+      ]).then(() => {
+        console.log("[CompleteTrip] Background completion writes finished.");
+      });
+
     } catch (e) {
       console.error("Error completing trip:", e);
+      toast.error("Failed to complete trip", { id: 'end-trip' });
     }
   };
 

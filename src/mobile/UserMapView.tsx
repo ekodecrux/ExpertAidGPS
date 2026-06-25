@@ -815,23 +815,49 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
               <div className="space-y-4">
                 {uData?.notifications?.length > 0 ? (
                   uData.notifications.slice().reverse().map((n: any, i: number) => {
-                    const isPicked = n.type === 'status_picked' || n.message.toLowerCase().includes('picked');
-                    const isDropped = n.type === 'status_dropped' || n.message.toLowerCase().includes('dropped');
-                    const isAbsent = n.type === 'status_absent' || n.message.toLowerCase().includes('absent');
+                    const messageCleaned = cleanMessage(n.message);
+                    const isStart = n.type === 'trip_start' || n.type === 'start' || n.message?.toLowerCase().includes('started');
+                    const isEnd = n.type === 'trip_end' || n.type === 'end' || n.message?.toLowerCase().includes('completed');
+                    const isPicked = n.type === 'status_picked' || n.type === 'picked';
+                    const isDropped = n.type === 'status_dropped' || n.type === 'dropped';
+                    const isAbsent = n.type === 'status_absent' || n.type === 'absent';
                     
+                    let bgClass = "bg-slate-50 border-slate-100";
+                    let iconBg = "bg-blue-50 text-blue-600";
+                    let IconComponent = Bell;
+                    
+                    if (isStart) {
+                      bgClass = "bg-blue-50/50 border-blue-100/50";
+                      iconBg = "bg-blue-100/80 text-blue-600";
+                      IconComponent = Navigation;
+                    } else if (isEnd) {
+                      bgClass = "bg-emerald-50/50 border-emerald-100/50";
+                      iconBg = "bg-emerald-100/80 text-emerald-600";
+                      IconComponent = CheckCircle;
+                    } else if (isPicked) {
+                      bgClass = "bg-emerald-50/50 border-emerald-100/50";
+                      iconBg = "bg-emerald-100/80 text-emerald-600";
+                      IconComponent = CheckCircle;
+                    } else if (isDropped) {
+                      bgClass = "bg-blue-50/50 border-blue-100/50";
+                      iconBg = "bg-blue-100/80 text-blue-600";
+                      IconComponent = Home;
+                    } else if (isAbsent) {
+                      bgClass = "bg-rose-50/50 border-rose-100/50";
+                      iconBg = "bg-rose-100/80 text-rose-600";
+                      IconComponent = Bell; // Fallback or XCircle (we don't import XCircle, let's keep Bell or CheckCircle / Home)
+                    }
+
                     return (
-                      <div key={i} className="flex gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100 items-center">
+                      <div key={i} className={cn("flex gap-4 p-4 rounded-2xl items-center border", bgClass)}>
                         <div className={cn(
-                          "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                          isPicked ? "bg-emerald-100 text-emerald-600" :
-                          isDropped ? "bg-blue-100 text-blue-600" :
-                          isAbsent ? "bg-rose-100 text-rose-600" : "bg-blue-50 text-blue-600"
+                          "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm",
+                          iconBg
                         )}>
-                          {isPicked ? <CheckCircle size={18} /> : 
-                           isDropped ? <Home size={18} /> : <Bell size={18} />}
+                          <IconComponent size={18} />
                         </div>
-                        <div>
-                          <p className="text-sm font-black text-slate-800 uppercase tracking-tighter leading-tight mb-0.5">{cleanMessage(n.message)}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-black text-slate-800 uppercase tracking-tighter leading-tight mb-1 break-words">{messageCleaned}</p>
                           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(n.timestamp).toLocaleTimeString()}</p>
                         </div>
                       </div>

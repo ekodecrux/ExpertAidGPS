@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Home, Map, Bell, User, Settings as SettingsIcon, Menu, X, LogOut, Shield, Truck, Users, MessageSquare, Clock, Navigation, Compass } from 'lucide-react';
-import { cn, getLocalAvatar, getUserAvatar, getLocalIcon } from '../lib/utils';
+import { Home, Map, Bell, User, Settings as SettingsIcon, Menu, X, LogOut, Shield, Truck, Users, MessageSquare, Clock, Navigation, Compass, CheckCircle, XCircle } from 'lucide-react';
+import { cn, getLocalAvatar, getUserAvatar, getLocalIcon, cleanMessage } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
+import { saveMySQLRecord } from '../lib/mysql';
 
 interface MobileLayoutProps {
   children: React.ReactNode;
@@ -15,8 +16,25 @@ interface MobileLayoutProps {
 }
 
 export default function MobileLayout({ children, activeTab, onTabChange, tabs, headerRight }: MobileLayoutProps) {
-  const { userData, logout } = useAuth();
-  const [org, setOrg] = useState<any>(null);
+  const { userData, logout, refreshUserData } = useAuth();
+  const [org, setOrg] = useState<any>(() => {
+    if (!userData?.uid && !userData?.id) return null;
+    try {
+      const cached = localStorage.getItem(`expert_gps_user_db_data_${userData.uid || userData.id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.org) {
+          return {
+            ...parsed.org,
+            location: parsed.org.location || (parsed.org.latitude && parsed.org.longitude ? { lat: parseFloat(parsed.org.latitude), lng: parseFloat(parsed.org.longitude) } : null)
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("Error parsing cached org in MobileLayout:", e);
+    }
+    return null;
+  });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -34,13 +52,53 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
     return () => unsub();
   }, [userData?.orgId]);
 
+  useEffect(() => {
+    if (!userData) return;
+
+    const fetchOrgFromMySQL = async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+        const resObj = await fetch('/api/records/user-data', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (resObj.ok) {
+          const res = await resObj.json();
+          if (res.success && res.org) {
+            setOrg({
+              ...res.org,
+              location: res.org.location || (res.org.latitude && res.org.longitude ? { lat: parseFloat(res.org.latitude), lng: parseFloat(res.org.longitude) } : null)
+            });
+            localStorage.setItem(`expert_gps_user_db_data_${userData.uid || userData.id}`, JSON.stringify(res));
+          }
+        }
+      } catch (err) {
+        console.warn("MobileLayout MySQL fetch organization failed, relying on Firestore/Cache:", err);
+      }
+    };
+
+    fetchOrgFromMySQL();
+  }, [userData]);
+
   const handleDismissAll = async () => {
     if (!userData || !userData.notifications) return;
     try {
       const updatedNotifs = userData.notifications.map(n => ({ ...n, dismissed: true }));
-      await updateDoc(doc(db, 'users', userData.id || userData.uid), {
-        notifications: updatedNotifs
-      });
+      
+      // Update both MySQL and Firestore to ensure perfect sync
+      await Promise.all([
+        saveMySQLRecord('update', 'users', userData.id || userData.uid, {
+          notifications: updatedNotifs
+        }),
+        updateDoc(doc(db, 'users', userData.id || userData.uid), {
+          notifications: updatedNotifs
+        }).catch(err => console.warn("Failed to update Firestore notifications:", err))
+      ]);
+
+      // Instantly refresh local user data so unread states / counts are cleared immediately
+      await refreshUserData();
       setShowNotifications(false);
     } catch (e) {
       console.error("Error dismissing notifications:", e);
@@ -147,22 +205,58 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
                        <p className="text-[10px] font-black uppercase tracking-widest">No active alerts</p>
                     </div>
                   ) : (
-                    [...activeNotifications].reverse().map((n: any, idx: number) => (
-                      <div key={idx} className="bg-slate-50 p-4 rounded-3xl border border-slate-100 relative overflow-hidden group">
-                        <div className="flex gap-4">
-                           <div className="flex-1">
-                              <p className="text-xs font-bold text-slate-900 leading-tight mb-1">{n.message}</p>
-                              <div className="flex items-center gap-2">
-                                 <Clock size={10} className="text-slate-400" />
-                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                              </div>
-                           </div>
-                           <div className="flex-shrink-0">
-                             <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                           </div>
+                    [...activeNotifications].reverse().map((n: any, idx: number) => {
+                      const messageCleaned = cleanMessage(n.message);
+                      const isStart = n.type === 'trip_start' || n.type === 'start' || n.message?.toLowerCase().includes('started');
+                      const isEnd = n.type === 'trip_end' || n.type === 'end' || n.message?.toLowerCase().includes('completed');
+                      const isPicked = n.type === 'status_picked' || n.type === 'picked';
+                      const isDropped = n.type === 'status_dropped' || n.type === 'dropped';
+                      const isAbsent = n.type === 'status_absent' || n.type === 'absent';
+                      
+                      let bgClass = "bg-slate-50/80 border-slate-100/50";
+                      let iconBg = "bg-slate-100 text-slate-600";
+                      let IconComponent = Bell;
+                      
+                      if (isStart) {
+                        bgClass = "bg-blue-50/60 border-blue-100/50";
+                        iconBg = "bg-blue-100/80 text-blue-600";
+                        IconComponent = Navigation;
+                      } else if (isEnd) {
+                        bgClass = "bg-emerald-50/60 border-emerald-100/50";
+                        iconBg = "bg-emerald-100/80 text-emerald-600";
+                        IconComponent = CheckCircle;
+                      } else if (isPicked) {
+                        bgClass = "bg-emerald-50/60 border-emerald-100/50";
+                        iconBg = "bg-emerald-100/80 text-emerald-600";
+                        IconComponent = CheckCircle;
+                      } else if (isDropped) {
+                        bgClass = "bg-blue-50/60 border-blue-100/50";
+                        iconBg = "bg-blue-100/80 text-blue-600";
+                        IconComponent = Home;
+                      } else if (isAbsent) {
+                        bgClass = "bg-rose-50/60 border-rose-100/50";
+                        iconBg = "bg-rose-100/80 text-rose-600";
+                        IconComponent = XCircle;
+                      }
+
+                      return (
+                        <div key={idx} className={cn("p-4 rounded-[1.8rem] border flex items-start gap-3.5 transition-all", bgClass)}>
+                          <div className={cn("w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm", iconBg)}>
+                            <IconComponent size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-slate-800 leading-snug mb-1.5">{messageCleaned}</p>
+                            <div className="flex items-center gap-1.5">
+                               <Clock size={10} className="text-slate-400" />
+                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                          </div>
+                          <div className="flex-shrink-0 pt-1">
+                            <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                </div>
 

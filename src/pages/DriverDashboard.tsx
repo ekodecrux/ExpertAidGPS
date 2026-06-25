@@ -52,16 +52,22 @@ import {
 } from "../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import toast from "react-hot-toast";
-import { saveMySQLRecord } from "../lib/mysql";
+import { saveMySQLRecord, saveMySQLRecordsBatch } from "../lib/mysql";
 
 interface DriverDashboardProps {
   driverData?: any;
+  setDriverData?: (d: any) => void;
   driverDataLoading?: boolean;
+  activeTrip?: any;
+  setActiveTrip?: (t: any) => void;
 }
 
 export default function DriverDashboard({
   driverData,
+  setDriverData,
   driverDataLoading,
+  activeTrip: propActiveTrip,
+  setActiveTrip: propSetActiveTrip,
 }: DriverDashboardProps = {}) {
   const { userData } = useAuth();
   const [route, setRoute] = useState<any>(null);
@@ -69,7 +75,9 @@ export default function DriverDashboard({
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [vehicle, setVehicle] = useState<any>(null);
   const [org, setOrg] = useState<any>(null);
-  const [activeTrip, setActiveTrip] = useState<any>(null);
+  const [localActiveTrip, setLocalActiveTrip] = useState<any>(null);
+  const activeTrip = propActiveTrip !== undefined ? propActiveTrip : localActiveTrip;
+  const setActiveTrip = propSetActiveTrip !== undefined ? propSetActiveTrip : setLocalActiveTrip;
   const [tripType, setTripType] = useState<"pickup" | "dropoff">("pickup");
   const [isTracking, setIsTracking] = useState(false);
   const [manifest, setManifest] = useState<any[]>([]);
@@ -308,6 +316,12 @@ export default function DriverDashboard({
         );
         if (matchedVehicle) {
           setVehicle(matchedVehicle);
+        } else {
+          setVehicle({
+            id: trackingVehicleId,
+            plateNumber: "BUS-01",
+            status: "active",
+          });
         }
       }
     };
@@ -603,143 +617,210 @@ export default function DriverDashboard({
   const termSingular = getSectorTerminology(org?.sector, false);
 
   const toggleTrip = async () => {
-    if (isTracking) {
-      // STOP TRIP
-      setIsTracking(false);
-      if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
-      if (activeTrip) {
-        await saveMySQLRecord("update", "trips", activeTrip.id, {
-          status: "completed",
-          endTime: new Date().toISOString(),
-          endedAt: new Date().toISOString(),
+    try {
+      if (isTracking) {
+        // STOP TRIP
+        setIsTracking(false);
+        if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
+        
+        const activeTripId = activeTrip?.id;
+
+        // Optimistic parent & local state updates
+        setActiveTrip(null);
+        if (setDriverData && driverData && activeTripId) {
+          const updatedTrips = (driverData.trips || []).filter((t: any) => t && t.id !== activeTripId);
+          setDriverData({
+            ...driverData,
+            trips: updatedTrips
+          });
+        }
+
+        toast.success("Trip completed", { id: 'trip-toggle' });
+
+        if (activeTripId) {
+          // Fire database writes concurrently in background
+          Promise.all([
+            saveMySQLRecord("update", "trips", activeTripId, {
+              status: "completed",
+              endTime: new Date().toISOString(),
+              endedAt: new Date().toISOString(),
+              manifest: JSON.stringify(
+                manifest.map((m) => ({
+                  uid: m.uid || m.id,
+                  studentId: m.studentId || "",
+                  name: m.name,
+                  pickupStatus: m.pickupStatus || "waiting",
+                  dropoffStatus: m.dropoffStatus || "waiting",
+                  pickupUpdatedAt: m.pickupUpdatedAt || null,
+                  dropoffUpdatedAt: m.dropoffUpdatedAt || null,
+                  pickupPointId: m.pickupPointId,
+                })),
+              ),
+            }),
+            updateDoc(doc(db, 'trips', activeTripId), {
+              status: 'completed',
+              endTime: serverTimestamp()
+            }).catch((err) => {
+              console.warn("[StopTrip] Firestore trip completion failed:", err.message);
+            }),
+            vehicle ? saveMySQLRecord("update", "vehicles", vehicle.id, {
+              status: "active",
+            }) : Promise.resolve(),
+            vehicle ? updateDoc(doc(db, 'vehicles', vehicle.id), {
+              status: 'active'
+            }).catch((err) => {
+              console.warn("[StopTrip] Firestore vehicle completion failed:", err.message);
+            }) : Promise.resolve()
+          ]).catch((err) => {
+            console.warn("[StopTrip] background writes failed:", err);
+          });
+
+          // Send notifications in the background
+          try {
+            const tripSummary =
+              activeTrip.direction === "pickup"
+                ? "Pick to School trip"
+                : "Drop to Home trip";
+            const batchOps = manifest.map((m) => {
+              const existingNotifs = Array.isArray(m.notifications)
+                ? m.notifications
+                : [];
+              const updatedNotifs = [
+                ...existingNotifs,
+                {
+                  message: `🏁 ${tripSummary} for ${route?.name || "your route"} has been completed by ${userData.name}.`,
+                  timestamp: new Date().toISOString(),
+                  type: "trip_end",
+                  dismissed: false,
+                },
+              ];
+              return {
+                operation: "update" as const,
+                table: "users",
+                id: m.uid || m.id,
+                data: {
+                  notifications: JSON.stringify(updatedNotifs)
+                }
+              };
+            });
+            saveMySQLRecordsBatch(batchOps).catch((err) => {
+              console.warn("Background trip end notification batch failed:", err);
+            });
+          } catch (err) {
+            console.error("Error setting up trip end notifications:", err);
+          }
+        }
+      } else {
+        // START TRIP
+        if (!route || !vehicle) {
+          return toast.error("Route/Vehicle configuration missing", { id: 'trip-toggle-err' });
+        }
+
+        setIsTracking(true);
+        const newTripId =
+          "TRIP-" + Math.random().toString(36).substr(2, 9).toUpperCase();
+
+        const isPickup = tripType === "pickup";
+        const resetOps = manifest.map((m) => {
+          const resetData: any = {};
+          if (isPickup) {
+            resetData.pickupStatus = "waiting";
+            resetData.pickupUpdatedAt = null;
+          } else {
+            resetData.dropoffStatus = "waiting";
+            resetData.dropoffUpdatedAt = null;
+          }
+          return {
+            operation: "update" as const,
+            table: "users",
+            id: m.uid || m.id,
+            data: resetData
+          };
+        });
+
+        // Create a clean manifest based on the direction resetting
+        const cleanManifest = manifest.map((m) => ({
+          ...m,
+          pickupStatus: isPickup ? "waiting" : m.pickupStatus,
+          dropoffStatus: !isPickup ? "waiting" : m.dropoffStatus,
+          pickupUpdatedAt: isPickup ? null : m.pickupUpdatedAt,
+          dropoffUpdatedAt: !isPickup ? null : m.dropoffUpdatedAt,
+        }));
+        setManifest(cleanManifest);
+
+        // Determine the first stop with pending members in the sorted order
+        let initialStopId: any = null;
+        if (route?.pickupPoints && route.pickupPoints.length > 0) {
+          const sortedPoints = getSortedStops(route.pickupPoints, null, tripType);
+          for (const p of sortedPoints) {
+            if (isValidCoordinate(p.lat, p.lng)) {
+              const stopMembers = cleanManifest.filter(u => String(u.pickupPointId) === String(p.id));
+              const targetStatus = tripType === 'dropoff' ? 'dropped' : 'picked';
+              const allHandled = stopMembers.length === 0 || stopMembers.every(u => u.status === targetStatus || u.status === 'absent');
+              if (!allHandled) {
+                initialStopId = p.id;
+                break;
+              }
+            }
+          }
+          if (!initialStopId && sortedPoints.length > 0) {
+            initialStopId = sortedPoints[0].id;
+          }
+        }
+
+        const currentDriverId = userData?.id || userData?.uid;
+        const createdTrip = {
+          id: newTripId,
+          routeId: route.id,
+          vehicleId: vehicle.id,
+          driverId: currentDriverId,
+          status: "live",
+          direction: tripType,
+          currentLocation: JSON.stringify({
+            lat: org?.location?.lat || 0,
+            lng: org?.location?.lng || 0,
+          }),
+          startedAt: new Date().toISOString(),
+          startTime: new Date().toISOString(),
+          orgId: userData.orgId,
+          currentStopId: initialStopId,
           manifest: JSON.stringify(
-            manifest.map((m) => ({
+            cleanManifest.map((m) => ({
               uid: m.uid || m.id,
               studentId: m.studentId || "",
               name: m.name,
-              pickupStatus: m.pickupStatus || "waiting",
-              dropoffStatus: m.dropoffStatus || "waiting",
-              pickupUpdatedAt: m.pickupUpdatedAt || null,
-              dropoffUpdatedAt: m.dropoffUpdatedAt || null,
+              pickupStatus: m.pickupStatus,
+              dropoffStatus: m.dropoffStatus,
+              pickupUpdatedAt: m.pickupUpdatedAt,
+              dropoffUpdatedAt: m.dropoffUpdatedAt,
               pickupPointId: m.pickupPointId,
-            })),
+            }))
           ),
+        };
+
+        // Optimistic parent & local state updates
+        setActiveTrip({
+          id: newTripId,
+          routeId: route.id,
+          vehicleId: vehicle.id,
+          direction: tripType,
+          currentStopId: initialStopId,
+          status: "live",
         });
 
-        // Notify all users of trip completion via MySQL
-        try {
-          const tripSummary =
-            activeTrip.direction === "pickup"
-              ? "Pick to School trip"
-              : "Drop to Home trip";
-          const manifestPromises = manifest.map(async (m) => {
-            const existingNotifs = Array.isArray(m.notifications)
-              ? m.notifications
-              : [];
-            const updatedNotifs = [
-              ...existingNotifs,
-              {
-                message: `🏁 ${tripSummary} for ${route?.name || "your route"} has been completed by ${userData.name}.`,
-                timestamp: new Date().toISOString(),
-                type: "trip_end",
-                dismissed: false,
-              },
-            ];
-            await saveMySQLRecord("update", "users", m.uid || m.id, {
-              notifications: JSON.stringify(updatedNotifs),
-            });
+        if (setDriverData && driverData) {
+          const otherTrips = (driverData.trips || []).filter((t: any) => t && t.driverId !== currentDriverId);
+          setDriverData({
+            ...driverData,
+            trips: [...otherTrips, createdTrip]
           });
-          await Promise.all(manifestPromises);
-        } catch (err) {
-          console.error("Error notifying users of trip end:", err);
         }
-      }
-      if (vehicle) {
-        await saveMySQLRecord("update", "vehicles", vehicle.id, {
-          status: "active",
-        });
-      }
-      setActiveTrip(null);
-      toast.success("Trip completed");
-    } else {
-      // START TRIP
-      if (!route || !vehicle)
-        return toast.error("Route/Vehicle configuration missing");
 
-      setIsTracking(true);
-      const newTripId =
-        "TRIP-" + Math.random().toString(36).substr(2, 9).toUpperCase();
+        toast.success("Trip sequence initiated", { id: 'trip-toggle' });
 
-      // Reset statuses in MySQL for starting trip direction to waiting
-      const isPickup = tripType === "pickup";
-      const resetPromises = manifest.map(async (m) => {
-        const resetData: any = {};
-        if (isPickup) {
-          resetData.pickupStatus = "waiting";
-          resetData.pickupUpdatedAt = null;
-        } else {
-          resetData.dropoffStatus = "waiting";
-          resetData.dropoffUpdatedAt = null;
-        }
-        try {
-          await saveMySQLRecord("update", "users", m.uid || m.id, resetData);
-        } catch (e) {
-          console.warn("Failed resetting passenger status at trip start:", e);
-        }
-      });
-      await Promise.all(resetPromises);
-
-      // Create a clean manifest based on the direction resetting
-      const cleanManifest = manifest.map((m) => ({
-        ...m,
-        pickupStatus: isPickup ? "waiting" : m.pickupStatus,
-        dropoffStatus: !isPickup ? "waiting" : m.dropoffStatus,
-        pickupUpdatedAt: isPickup ? null : m.pickupUpdatedAt,
-        dropoffUpdatedAt: !isPickup ? null : m.dropoffUpdatedAt,
-      }));
-      setManifest(cleanManifest);
-
-      await saveMySQLRecord("insert", "trips", newTripId, {
-        id: newTripId,
-        routeId: route.id,
-        vehicleId: vehicle.id,
-        driverId: userData?.id || userData?.uid,
-        status: "live",
-        direction: tripType,
-        currentLocation: JSON.stringify({
-          lat: org?.location?.lat || 0,
-          lng: org?.location?.lng || 0,
-        }),
-        startedAt: new Date().toISOString(),
-        startTime: new Date().toISOString(),
-        orgId: userData.orgId,
-        manifest: JSON.stringify(
-          cleanManifest.map((m) => ({
-            uid: m.uid || m.id,
-            studentId: m.studentId || "",
-            name: m.name,
-            pickupStatus: m.pickupStatus,
-            dropoffStatus: m.dropoffStatus,
-            pickupUpdatedAt: m.pickupUpdatedAt,
-            dropoffUpdatedAt: m.dropoffUpdatedAt,
-            pickupPointId: m.pickupPointId,
-          }))
-        ),
-      });
-      setActiveTrip({
-        id: newTripId,
-        routeId: route.id,
-        vehicleId: vehicle.id,
-        direction: tripType,
-      });
-      await saveMySQLRecord("update", "vehicles", vehicle.id, {
-        status: "on-trip",
-      });
-
-      // Notify all users on this route via MySQL
-      try {
+        // Notify all users on this route via MySQL in a single fast batch!
         const tripSummary = tripType === "pickup" ? "Pick Up" : "Drop Off";
-        const manifestPromises = manifest.map(async (m) => {
+        const notifyOps = manifest.map((m) => {
           const existingNotifs = Array.isArray(m.notifications)
             ? m.notifications
             : [];
@@ -752,68 +833,108 @@ export default function DriverDashboard({
               dismissed: false,
             },
           ];
-          await saveMySQLRecord("update", "users", m.uid || m.id, {
-            notifications: JSON.stringify(updatedNotifs),
-          });
+          return {
+            operation: "update" as const,
+            table: "users",
+            id: m.uid || m.id,
+            data: {
+              notifications: JSON.stringify(updatedNotifs)
+            }
+          };
         });
-        await Promise.all(manifestPromises);
-      } catch (err) {
-        console.error("Error notifying users of trip start:", err);
-      }
 
-      // Start geolocation tracking
-      if ("geolocation" in navigator) {
-        let fallbackMode = false;
-        const startTracking = (useHighAccuracy: boolean): any => {
-          return navigator.geolocation.watchPosition(
-            async (position) => {
-              const { latitude, longitude } = position.coords;
-              if (isValidCoordinate(latitude, longitude)) {
-                // Update Firestore for real-time maps
-                updateDoc(doc(db, "vehicles", vehicle.id), {
-                  location: { lat: latitude, lng: longitude },
-                  updatedAt: new Date().toISOString(),
-                }).catch((e) =>
-                  console.warn("Vehicle tracking Firestore update error:", e),
-                );
+        // Fire all start trip operations concurrently in the background
+        Promise.all([
+          saveMySQLRecordsBatch(resetOps).catch((err) => {
+            console.warn("[StartTrip] MySQL reset statuses batch failed:", err.message);
+          }),
+          saveMySQLRecord("insert", "trips", newTripId, createdTrip).catch((err) => {
+            console.warn("[StartTrip] MySQL trip insert failed:", err.message);
+          }),
+          setDoc(doc(db, 'trips', newTripId), {
+            orgId: userData.orgId,
+            routeId: route.id,
+            driverId: currentDriverId,
+            vehicleId: vehicle.id,
+            status: 'live',
+            direction: tripType,
+            startTime: serverTimestamp(),
+            currentLocation: { lat: org?.location?.lat || 0, lng: org?.location?.lng || 0 },
+            currentStopId: initialStopId
+          }).catch((err) => {
+            console.warn("[StartTrip] Firestore trip set failed:", err.message);
+          }),
+          saveMySQLRecord("update", "vehicles", vehicle.id, {
+            status: "on-trip",
+          }).catch((err) => {
+            console.warn("[StartTrip] MySQL vehicle update failed:", err.message);
+          }),
+          updateDoc(doc(db, 'vehicles', vehicle.id), { status: 'on-trip' }).catch((err) => {
+            console.warn("[StartTrip] Firestore vehicle update failed:", err.message);
+          }),
+          saveMySQLRecordsBatch(notifyOps).catch((err) => {
+            console.warn("[StartTrip] MySQL notifications batch failed:", err.message);
+          })
+        ]).catch((err) => {
+          console.warn("[StartTrip] background writes failed:", err);
+        });
 
-                // Update MySQL
-                await saveMySQLRecord("update", "vehicles", vehicle.id, {
-                  latitude: latitude,
-                  longitude: longitude,
-                  location: { lat: latitude, lng: longitude },
-                  updatedAt: new Date().toISOString(),
-                }).catch((err) =>
-                  console.warn(
-                    "Failed to update vehicle coords in MySQL:",
-                    err,
-                  ),
-                );
-              }
-            },
-            async (error) => {
-              console.warn(
-                `Geolocation error (highAccuracy=${useHighAccuracy}):`,
-                error.message,
-              );
-              if (useHighAccuracy && !fallbackMode) {
-                fallbackMode = true;
-                if (watchId.current) {
-                  navigator.geolocation.clearWatch(watchId.current);
+        // Start geolocation tracking
+        if ("geolocation" in navigator) {
+          let fallbackMode = false;
+          const startTracking = (useHighAccuracy: boolean): any => {
+            return navigator.geolocation.watchPosition(
+              async (position) => {
+                const { latitude, longitude } = position.coords;
+                if (isValidCoordinate(latitude, longitude)) {
+                  // Update Firestore for real-time maps
+                  updateDoc(doc(db, "vehicles", vehicle.id), {
+                    location: { lat: latitude, lng: longitude },
+                    updatedAt: new Date().toISOString(),
+                  }).catch((e) =>
+                    console.warn("Vehicle tracking Firestore update error:", e),
+                  );
+
+                  // Update MySQL
+                  saveMySQLRecord("update", "vehicles", vehicle.id, {
+                    latitude: latitude,
+                    longitude: longitude,
+                    location: { lat: latitude, lng: longitude },
+                    updatedAt: new Date().toISOString(),
+                  }).catch((err) =>
+                    console.warn(
+                      "Failed to update vehicle coords in MySQL:",
+                      err,
+                    ),
+                  );
                 }
-                watchId.current = startTracking(false);
-              }
-            },
-            {
-              enableHighAccuracy: useHighAccuracy,
-              maximumAge: useHighAccuracy ? 10000 : 30000,
-              timeout: 30000,
-            },
-          );
-        };
-        watchId.current = startTracking(true);
+              },
+              async (error) => {
+                console.warn(
+                  `Geolocation error (highAccuracy=${useHighAccuracy}):`,
+                  error.message,
+                );
+                if (useHighAccuracy && !fallbackMode) {
+                  fallbackMode = true;
+                  if (watchId.current) {
+                    navigator.geolocation.clearWatch(watchId.current);
+                  }
+                  watchId.current = startTracking(false);
+                }
+              },
+              {
+                enableHighAccuracy: useHighAccuracy,
+                maximumAge: useHighAccuracy ? 10000 : 30000,
+                timeout: 30000,
+              },
+            );
+          };
+          watchId.current = startTracking(true);
+        }
       }
-      toast.success("Trip sequence initiated");
+    } catch (error) {
+      console.error("Error toggling trip status:", error);
+      toast.error("Failed to update trip. Please try again.");
     }
   };
 

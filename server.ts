@@ -259,8 +259,9 @@ async function start() {
             await firestoreDb.collection("users").doc(userRecord.uid).set(driverDoc);
 
             // Replicate directly to MySQL if configured
+            let connReplicate: any = null;
             try {
-              const connReplicate = await getMySQLConnection();
+              connReplicate = await getMySQLConnection();
               const uDate = new Date().toISOString();
               await connReplicate.query(
                 `INSERT INTO users (uid, email, name, phone, role, orgId, routeId, vehicleId, pickupPointId, studentId, updatedAt) 
@@ -274,6 +275,12 @@ async function start() {
               console.log(`[Start-Up Recovery] MySQL user replication successful for ${email}`);
             } catch (mysqlErr: any) {
               // Fail silently for MySQL if not configured or using emulated connection
+            } finally {
+              if (connReplicate) {
+                try {
+                  await connReplicate.end();
+                } catch (e) {}
+              }
             }
 
             console.log(`[Start-Up Recovery] Successfully restored ${email} login ("12345678") and all allocations under Expertaid Technologies.`);
@@ -549,20 +556,23 @@ async function start() {
       if (pool) {
         const connection = await pool.getConnection();
 
-        // Intercept connection.end() so it doesn't destroy the pooled connection
-        const originalEnd = connection.end?.bind(connection);
-        connection.end = async () => {
-          try {
-            connection.release();
-          } catch (err: any) {
-            console.warn("[MySQL Pool] Failed to release connection, falling back to ending:", err.message);
+        // Intercept connection.end() once so it doesn't destroy the pooled connection
+        if (!(connection as any).__isIntercepted) {
+          const originalEnd = connection.end?.bind(connection);
+          connection.end = async () => {
             try {
-              if (originalEnd) {
-                await originalEnd();
-              }
-            } catch (e) {}
-          }
-        };
+              connection.release();
+            } catch (err: any) {
+              console.warn("[MySQL Pool] Failed to release connection, falling back to ending:", err.message);
+              try {
+                if (originalEnd) {
+                  await originalEnd();
+                }
+              } catch (e) {}
+            }
+          };
+          (connection as any).__isIntercepted = true;
+        }
 
         return connection;
       }
@@ -601,20 +611,23 @@ async function start() {
 
       const connection = await pool.getConnection();
 
-      // Intercept connection.end() so it doesn't destroy the pooled connection
-      const originalEnd = connection.end?.bind(connection);
-      connection.end = async () => {
-        try {
-          connection.release();
-        } catch (err: any) {
-          console.warn("[MySQL Pool] Failed to release connection, falling back to ending:", err.message);
+      // Intercept connection.end() once so it doesn't destroy the pooled connection
+      if (!(connection as any).__isIntercepted) {
+        const originalEnd = connection.end?.bind(connection);
+        connection.end = async () => {
           try {
-            if (originalEnd) {
-              await originalEnd();
-            }
-          } catch (e) {}
-        }
-      };
+            connection.release();
+          } catch (err: any) {
+            console.warn("[MySQL Pool] Failed to release connection, falling back to ending:", err.message);
+            try {
+              if (originalEnd) {
+                await originalEnd();
+              }
+            } catch (e) {}
+          }
+        };
+        (connection as any).__isIntercepted = true;
+      }
 
       return connection;
     } catch (err: any) {
@@ -2733,6 +2746,265 @@ async function start() {
           await conn.end();
         } catch (closeErr: any) {
           console.warn("[POST save release error]:", closeErr.message);
+        }
+      }
+    }
+  });
+
+  app.post("/api/records/save-batch", verifyAnyUser, async (req: any, res) => {
+    const { operations } = req.body;
+    const currentUser = req.user;
+    const isSuperAdmin = currentUser.isSuperAdmin;
+    const isOrgAdmin = currentUser.isOrgAdmin;
+    const orgId = currentUser.orgId;
+
+    if (!operations || !Array.isArray(operations)) {
+      return res.status(400).json({ error: "Missing or invalid operations array" });
+    }
+
+    // Check authorization for all operations upfront
+    if (!isSuperAdmin) {
+      const isDriver = currentUser.role === "driver";
+      const isUser = currentUser.role === "user";
+
+      if (!isOrgAdmin && !isDriver && !isUser) {
+        return res.status(403).json({ error: "Forbidden: Insufficient privileges" });
+      }
+
+      for (const op of operations) {
+        const { operation, table, id, data } = op;
+        if (!operation || !table || !id) {
+          return res.status(400).json({ error: "Missing required parameters in an operation" });
+        }
+
+        // Restrict deletes to Org Admins
+        if (operation === "delete" && !isOrgAdmin) {
+          return res.status(403).json({ error: "Forbidden: Only admins can delete records" });
+        }
+
+        // Restrict sensitive tables to Org Admins
+        if ((table === "organizations" || table === "logs") && !isOrgAdmin) {
+          return res.status(403).json({ error: "Forbidden: Only admins can manage organizations or logs" });
+        }
+
+        if (table === "organizations") {
+          return res.status(403).json({ error: "Forbidden: Batch update of organizations is not allowed" });
+        } else if (table === "logs") {
+          return res.status(403).json({ error: "Forbidden: Org Admin cannot modify logs" });
+        } else {
+          // Enforce orgId constraint
+          if (data && data.orgId && data.orgId !== orgId) {
+            return res.status(403).json({ error: "Forbidden: Cannot write data for another organization" });
+          }
+          if (data) {
+            data.orgId = orgId; // enforce own orgId
+          }
+        }
+      }
+    }
+
+    let conn: any = null;
+    try {
+      conn = await getMySQLConnection();
+
+      // We run inside a transaction for atomic and extremely fast execution
+      await conn.beginTransaction();
+
+      for (const op of operations) {
+        const { operation, table, id, data } = op;
+
+        // Retrieve existing database row if any for safe partial updates
+        let existingRecord: any = null;
+        try {
+          const idCol = table === "users" ? "uid" : "id";
+          const [rows] = await conn.query(`SELECT * FROM \`${table}\` WHERE \`${idCol}\` = ?`, [id]);
+          if (rows && (rows as any[]).length > 0) {
+            existingRecord = (rows as any[])[0];
+          }
+        } catch (getErr: any) {
+          console.warn(`[WARN - safe merge check failed inside batch]:`, getErr.message);
+        }
+        
+        const mergedData = { ...existingRecord, ...data };
+
+        if (operation === "delete") {
+          if (table === "users") {
+            await conn.query("DELETE FROM trips WHERE driverId = ?", [id]);
+            await conn.query("DELETE FROM users WHERE uid = ?", [id]);
+          } else if (table === "routes") {
+            await conn.query("UPDATE users SET routeId = '', pickupPointId = '' WHERE routeId = ?", [id]);
+            await conn.query("DELETE FROM trips WHERE routeId = ?", [id]);
+            await conn.query("DELETE FROM routes WHERE id = ?", [id]);
+          } else if (table === "vehicles") {
+            await conn.query("UPDATE users SET vehicleId = '' WHERE vehicleId = ?", [id]);
+            await conn.query("DELETE FROM trips WHERE vehicleId = ?", [id]);
+            await conn.query("DELETE FROM vehicles WHERE id = ?", [id]);
+          } else {
+            await conn.query(`DELETE FROM \`${table}\` WHERE id = ?`, [id]);
+          }
+
+          // Best-effort Firestore delete in background
+          try {
+            if (table === "users") {
+              firestoreDb.collection("users").doc(id).delete().catch(() => {});
+            } else {
+              firestoreDb.collection(table).doc(id).delete().catch(() => {});
+            }
+          } catch (fE) {}
+        } else {
+          // INSERT or UPDATE
+          if (table === "users") {
+            const phoneNum = mergedData.phone || mergedData.mobile || "";
+            const uDate = mergedData.updatedAt || new Date().toISOString();
+            const uOrgId = mergedData.orgId || "";
+            const uClassId = mergedData.classId || "";
+            const uSection = mergedData.section || "";
+            const uAvatar = mergedData.avatarUrl || "";
+            const uNotifs = Array.isArray(mergedData.notifications) ? JSON.stringify(mergedData.notifications) : (mergedData.notifications || "[]");
+            
+            const uStatus = mergedData.status !== undefined ? mergedData.status : null;
+            const uStatusUpdatedAt = mergedData.statusUpdatedAt !== undefined ? mergedData.statusUpdatedAt : null;
+            const uPickupStatus = mergedData.pickupStatus !== undefined ? mergedData.pickupStatus : null;
+            const uPickupUpdatedAt = mergedData.pickupUpdatedAt !== undefined ? mergedData.pickupUpdatedAt : null;
+            const uDropoffStatus = mergedData.dropoffStatus !== undefined ? mergedData.dropoffStatus : null;
+            const uDropoffUpdatedAt = mergedData.dropoffUpdatedAt !== undefined ? mergedData.dropoffUpdatedAt : null;
+            const uPickedAt = mergedData.pickedAt !== undefined ? mergedData.pickedAt : null;
+
+            await conn.query(
+              `INSERT INTO users (uid, email, name, phone, role, orgId, routeId, vehicleId, pickupPointId, studentId, classId, section, avatarUrl, notifications, status, statusUpdatedAt, pickupStatus, pickupUpdatedAt, dropoffStatus, dropoffUpdatedAt, pickedAt, updatedAt) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+               ON DUPLICATE KEY UPDATE email=?, name=?, phone=?, role=?, orgId=?, routeId=?, vehicleId=?, pickupPointId=?, studentId=?, classId=?, section=?, avatarUrl=?, notifications=?, status=?, statusUpdatedAt=?, pickupStatus=?, pickupUpdatedAt=?, dropoffStatus=?, dropoffUpdatedAt=?, pickedAt=?, updatedAt=?`,
+              [
+                id, mergedData.email || "", mergedData.name || "", phoneNum, mergedData.role || "", uOrgId, mergedData.routeId || "", mergedData.vehicleId || "", mergedData.pickupPointId || "", mergedData.studentId || "", uClassId, uSection, uAvatar, uNotifs, uStatus, uStatusUpdatedAt, uPickupStatus, uPickupUpdatedAt, uDropoffStatus, uDropoffUpdatedAt, uPickedAt, uDate,
+                mergedData.email || "", mergedData.name || "", phoneNum, mergedData.role || "", uOrgId, mergedData.routeId || "", mergedData.vehicleId || "", mergedData.pickupPointId || "", mergedData.studentId || "", uClassId, uSection, uAvatar, uNotifs, uStatus, uStatusUpdatedAt, uPickupStatus, uPickupUpdatedAt, uDropoffStatus, uDropoffUpdatedAt, uPickedAt, uDate
+              ]
+            );
+          } else if (table === "vehicles") {
+            const busLat = mergedData.latitude !== undefined ? mergedData.latitude : (mergedData.location?.lat !== undefined ? mergedData.location.lat : null);
+            const busLng = mergedData.longitude !== undefined ? mergedData.longitude : (mergedData.location?.lng !== undefined ? mergedData.location.lng : null);
+            const lastUp = mergedData.lastUpdated || mergedData.updatedAt || "";
+            const mappedName = mergedData.model || mergedData.name || "";
+            const mappedNumber = mergedData.plateNumber || mergedData.number || "";
+            const mappedType = mergedData.yearMade || mergedData.type || "";
+            await conn.query(
+              `INSERT INTO vehicles (id, orgId, name, number, type, capacity, status, latitude, longitude, lastUpdated) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+               ON DUPLICATE KEY UPDATE orgId=?, name=?, number=?, type=?, capacity=?, status=?, latitude=?, longitude=?, lastUpdated=?`,
+              [
+                id, mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp,
+                mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp
+              ]
+            );
+          } else if (table === "routes") {
+            const routeData = mergedData || data || {};
+            const startPt = routeData.startPoint ? (typeof routeData.startPoint === "string" ? routeData.startPoint : JSON.stringify(routeData.startPoint)) : "";
+            const endPt = routeData.endPoint ? (typeof routeData.endPoint === "string" ? routeData.endPoint : JSON.stringify(routeData.endPoint)) : "";
+            const stopsStr = routeData.stops ? (typeof routeData.stops === "string" ? routeData.stops : JSON.stringify(routeData.stops)) : "[]";
+            const pickupStr = routeData.pickupPoints ? (typeof routeData.pickupPoints === "string" ? routeData.pickupPoints : JSON.stringify(routeData.pickupPoints)) : "[]";
+            await conn.query(
+              `INSERT INTO routes (id, orgId, name, startPoint, endPoint, distance, stops, pickupPoints) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?) 
+               ON DUPLICATE KEY UPDATE orgId=?, name=?, startPoint=?, endPoint=?, distance=?, stops=?, pickupPoints=?`,
+              [
+                id, routeData.orgId || "", routeData.name || "", startPt, endPt, routeData.distance || "", stopsStr, pickupStr,
+                routeData.orgId || "", routeData.name || "", startPt, endPt, routeData.distance || "", stopsStr, pickupStr
+              ]
+            );
+          } else if (table === "trips") {
+            const tripData = mergedData || data || {};
+            if (tripData.startedAt && !tripData.startTime) {
+              tripData.startTime = tripData.startedAt;
+            }
+            if (tripData.startTime && !tripData.startedAt) {
+              tripData.startedAt = tripData.startTime;
+            }
+            if (tripData.endedAt && !tripData.endTime) {
+              tripData.endTime = tripData.endedAt;
+            }
+            if (tripData.endTime && !tripData.endedAt) {
+              tripData.endedAt = tripData.endTime;
+            }
+            const sTime = tripData.startTime || "";
+            const eTime = tripData.endTime || "";
+            const tLat = tripData.currentLat !== undefined ? tripData.currentLat : (tripData.location?.lat !== undefined ? tripData.location.lat : null);
+            const tLng = tripData.currentLng !== undefined ? tripData.currentLng : (tripData.location?.lng !== undefined ? tripData.location.lng : null);
+            const curStopId = tripData.currentStopId || "";
+            const curEta = tripData.eta || "";
+            const manifestStr = tripData.manifest ? (typeof tripData.manifest === "string" ? tripData.manifest : JSON.stringify(tripData.manifest)) : "[]";
+            const directionStr = tripData.direction || "";
+            await conn.query(
+              `INSERT INTO trips (id, orgId, driverId, vehicleId, routeId, status, direction, startAddress, endAddress, startTime, endTime, currentLat, currentLng, currentStopId, eta, manifest) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+               ON DUPLICATE KEY UPDATE orgId=?, driverId=?, vehicleId=?, routeId=?, status=?, direction=?, startAddress=?, endAddress=?, startTime=?, endTime=?, currentLat=?, currentLng=?, currentStopId=?, eta=?, manifest=?`,
+              [
+                id, tripData.orgId || "", tripData.driverId || "", tripData.vehicleId || "", tripData.routeId || "", tripData.status || "", directionStr, tripData.startAddress || "", tripData.endAddress || "", sTime, eTime, tLat, tLng, curStopId, curEta, manifestStr,
+                tripData.orgId || "", tripData.driverId || "", tripData.vehicleId || "", tripData.routeId || "", tripData.status || "", directionStr, tripData.startAddress || "", mergedData.endAddress || "", sTime, eTime, tLat, tLng, curStopId, curEta, manifestStr
+              ]
+            );
+          } else if (table === "classes") {
+            const clsData = mergedData || data || {};
+            const sectionsStr = Array.isArray(clsData.sections) ? JSON.stringify(clsData.sections) : (clsData.sections || "[]");
+            await conn.query(
+              `INSERT INTO classes (id, orgId, name, sections) 
+               VALUES (?, ?, ?, ?) 
+               ON DUPLICATE KEY UPDATE orgId=?, name=?, sections=?`,
+              [
+                id, clsData.orgId || "", clsData.name || "", sectionsStr,
+                clsData.orgId || "", clsData.name || "", sectionsStr
+              ]
+            );
+          } else if (table === "logs") {
+            const lTime = data.timestamp || new Date().toISOString();
+            await conn.query(
+              `INSERT INTO logs (id, entity, action, description, organization, operator, timestamp) 
+               VALUES (?, ?, ?, ?, ?, ?, ?) 
+               ON DUPLICATE KEY UPDATE entity=?, action=?, description=?, organization=?, operator=?, timestamp=?`,
+              [
+                id, data.entity || "", data.action || "", data.description || "", data.organization || "", data.operator || "", lTime,
+                data.entity || "", data.action || "", data.description || "", data.organization || "", data.operator || "", lTime
+              ]
+            );
+          } else if (table === "payments") {
+            const pOrgId = data.orgId || "";
+            const pTime = data.timestamp || new Date().toISOString();
+            await conn.query(
+              `INSERT INTO payments (id, orgId, amount, paymentMode, transactionId, note, timestamp) 
+               VALUES (?, ?, ?, ?, ?, ?, ?) 
+               ON DUPLICATE KEY UPDATE orgId=?, amount=?, paymentMode=?, transactionId=?, note=?, timestamp=?`,
+              [
+                id, pOrgId, data.amount || 0, data.paymentMode || "", data.transactionId || "", data.note || "", pTime,
+                pOrgId, data.amount || 0, data.paymentMode || "", data.transactionId || "", data.note || "", pTime
+              ]
+            );
+          }
+
+          // Mirror to Firestore (async, non-blocking)
+          try {
+            if (table === "users") {
+              firestoreDb.collection("users").doc(id).set(mergedData, { merge: true }).catch(() => {});
+            } else {
+              firestoreDb.collection(table).doc(id).set(mergedData, { merge: true }).catch(() => {});
+            }
+          } catch (fE) {}
+        }
+      }
+
+      await conn.commit();
+      res.json({ success: true, message: `Successfully executed ${operations.length} batch operations` });
+    } catch (e: any) {
+      if (conn) {
+        try {
+          await conn.rollback();
+        } catch (rE) {}
+      }
+      console.error("[POST save-batch Error]:", e.message);
+      res.status(500).json({ error: "Failed to write batch database records", details: e.message });
+    } finally {
+      if (conn) {
+        try {
+          await conn.end();
+        } catch (closeErr: any) {
+          console.warn("[POST save-batch release error]:", closeErr.message);
         }
       }
     }

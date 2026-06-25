@@ -835,7 +835,7 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
           <div className="space-y-4">
             {(userData as any)?.notifications?.length > 0 ? (
               (userData as any).notifications.slice(-3).reverse().map((n: any, i: number) => (
-                <AlertItem key={i} text={n.message} time={new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toUpperCase()} />
+                <AlertItem key={i} text={cleanMessage(n.message)} time={new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toUpperCase()} />
               ))
             ) : (
               <p className="text-[10px] text-slate-500 font-black uppercase text-center py-4">No recent activity</p>
@@ -861,7 +861,7 @@ function AlertItem({ text, time }: { text: string, time: string }) {
     <div className="flex items-start justify-between gap-6 p-4 rounded-2xl bg-slate-800/30 border border-white/5 transition-all hover:bg-slate-800/80 group">
       <div className="flex gap-4">
          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 group-hover:scale-150 transition-transform"></div>
-         <p className="text-xs text-slate-400 group-hover:text-slate-200 transition-colors leading-relaxed font-medium">{text}</p>
+         <p className="text-xs text-slate-400 group-hover:text-slate-200 transition-colors leading-relaxed font-medium">{cleanMessage(text)}</p>
       </div>
       <span className="text-[9px] font-black text-slate-600 group-hover:text-slate-400 whitespace-nowrap uppercase tracking-tighter shrink-0 pt-0.5 transition-colors">{time}</span>
     </div>

@@ -3,7 +3,7 @@ import MobileLayout from '../components/MobileLayout';
 import UserDashboard from '../pages/UserDashboard';
 import UserMapView from './UserMapView';
 import UserRoutesView from './UserRoutesView';
-import { Home, Compass, Bell, User, MapPin, Bus, Clock, Mail, Phone, Shield, Key, Camera, CheckCircle, ChevronRight, LogOut, Navigation, X } from 'lucide-react';
+import { Home, Compass, Bell, User, MapPin, Bus, Clock, Mail, Phone, Shield, Key, Camera, CheckCircle, ChevronRight, LogOut, Navigation, X, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import { cn, getLocalAvatar, getUserAvatar, cleanMessage } from '../lib/utils';
@@ -297,66 +297,107 @@ export default function UserApp() {
             </div>
             <div className="space-y-4 pb-20">
               {(userData as any)?.notifications?.length > 0 ? (
-                (userData as any).notifications.slice().reverse().map((notif: any, i: number) => (
-                  <div 
-                    key={i} 
-                    onClick={() => !notif.dismissed && dismissNotification(notif.timestamp)}
-                    className={cn(
-                      "p-6 rounded-[2rem] shadow-xl border flex gap-4 transition-all active:scale-[0.98]",
-                      notif.dismissed ? "bg-slate-50 border-slate-100 opacity-60" : (
-                        notif.type === 'status_picked' ? "bg-emerald-50 border-emerald-100 ring-1 ring-emerald-50" : 
-                        notif.type === 'status_dropped' ? "bg-blue-50 border-blue-100 ring-1 ring-blue-50" : 
-                        notif.type === 'status_absent' ? "bg-rose-50 border-rose-100 ring-1 ring-rose-50" :
-                        "bg-white border-slate-100 ring-1 ring-slate-50"
-                      )
-                    )}
-                  >
-                    <div className={cn(
-                      "w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0",
-                      notif.dismissed ? "bg-slate-100 text-slate-400" : (
-                        notif.type === 'status_picked' ? "bg-emerald-100 text-emerald-600" : 
-                        notif.type === 'status_dropped' ? "bg-blue-100 text-blue-600" : 
-                        notif.type === 'status_absent' ? "bg-rose-100 text-rose-600" :
-                        "bg-blue-50 text-blue-600"
-                      )
-                    )}>
-                      {notif.type === 'status_picked' ? <CheckCircle size={20} /> : 
-                       notif.type === 'status_dropped' ? <Home size={20} /> : <Bus size={20} />}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start mb-1">
-                        <div className="flex items-center gap-2">
-                          <p className={cn(
-                            "text-[10px] font-black uppercase tracking-widest",
-                            notif.type === 'status_picked' ? "text-emerald-600" : 
-                            notif.type === 'status_dropped' ? "text-blue-600" : 
-                            notif.type === 'status_absent' ? "text-rose-600" : "text-blue-600"
-                          )}>
-                            {notif.type === 'status_picked' ? 'Pickup Confirmation' : 
-                             notif.type === 'status_dropped' ? 'Safe Drop-off' : 
-                             notif.type === 'status_absent' ? 'Attendance Alert' : 'Transit Update'}
-                          </p>
-                          {!notif.dismissed && (
-                            <span className={cn(
-                              "px-1.5 py-0.5 text-[7px] text-white font-black rounded-md animate-pulse",
-                              notif.type === 'status_picked' ? "bg-emerald-600" : 
-                              notif.type === 'status_dropped' ? "bg-blue-600" : 
-                              notif.type === 'status_absent' ? "bg-rose-600" : "bg-blue-600"
-                            )}>NEW</span>
-                          )}
+                (userData as any).notifications.slice().reverse().map((notif: any, i: number) => {
+                  const messageCleaned = cleanMessage(notif.message);
+                  const isStart = notif.type === 'trip_start' || notif.type === 'start' || notif.message?.toLowerCase().includes('started');
+                  const isEnd = notif.type === 'trip_end' || notif.type === 'end' || notif.message?.toLowerCase().includes('completed');
+                  const isPicked = notif.type === 'status_picked' || notif.type === 'picked';
+                  const isDropped = notif.type === 'status_dropped' || notif.type === 'dropped';
+                  const isAbsent = notif.type === 'status_absent' || notif.type === 'absent';
+
+                  let bgClass = "bg-white border-slate-100 ring-1 ring-slate-50";
+                  let iconBg = "bg-blue-50 text-blue-600";
+                  let IconComponent = Bus;
+                  let title = "Transit Update";
+                  let titleColor = "text-blue-600";
+                  let newBadgeBg = "bg-blue-600";
+
+                  if (isStart) {
+                    bgClass = "bg-blue-50/40 border-blue-100/50 ring-1 ring-blue-50/20";
+                    iconBg = "bg-blue-100/80 text-blue-600";
+                    IconComponent = Navigation;
+                    title = "Trip Started";
+                    titleColor = "text-blue-600";
+                    newBadgeBg = "bg-blue-600";
+                  } else if (isEnd) {
+                    bgClass = "bg-emerald-50/40 border-emerald-100/50 ring-1 ring-emerald-50/20";
+                    iconBg = "bg-emerald-100/80 text-emerald-600";
+                    IconComponent = CheckCircle;
+                    title = "Trip Completed";
+                    titleColor = "text-emerald-600";
+                    newBadgeBg = "bg-emerald-600";
+                  } else if (isPicked) {
+                    bgClass = "bg-emerald-50/40 border-emerald-100/50 ring-1 ring-emerald-50/20";
+                    iconBg = "bg-emerald-100/80 text-emerald-600";
+                    IconComponent = CheckCircle;
+                    title = "Pickup Confirmation";
+                    titleColor = "text-emerald-600";
+                    newBadgeBg = "bg-emerald-600";
+                  } else if (isDropped) {
+                    bgClass = "bg-blue-50/40 border-blue-100/50 ring-1 ring-blue-50/20";
+                    iconBg = "bg-blue-100/80 text-blue-600";
+                    IconComponent = Home;
+                    title = "Safe Drop-off";
+                    titleColor = "text-blue-600";
+                    newBadgeBg = "bg-blue-600";
+                  } else if (isAbsent) {
+                    bgClass = "bg-rose-50/40 border-rose-100/50 ring-1 ring-rose-50/20";
+                    iconBg = "bg-rose-100/80 text-rose-600";
+                    IconComponent = XCircle;
+                    title = "Attendance Alert";
+                    titleColor = "text-rose-600";
+                    newBadgeBg = "bg-rose-600";
+                  }
+
+                  if (notif.dismissed) {
+                    bgClass = "bg-slate-50 border-slate-100 opacity-60";
+                    iconBg = "bg-slate-100 text-slate-400";
+                  }
+
+                  return (
+                    <div 
+                      key={i} 
+                      onClick={() => !notif.dismissed && dismissNotification(notif.timestamp)}
+                      className={cn(
+                        "p-6 rounded-[2rem] shadow-xl border flex gap-4 transition-all active:scale-[0.98]",
+                        bgClass
+                      )}
+                    >
+                      <div className={cn(
+                        "w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm",
+                        iconBg
+                      )}>
+                        <IconComponent size={20} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start mb-1">
+                          <div className="flex items-center gap-2">
+                            <p className={cn(
+                              "text-[10px] font-black uppercase tracking-widest",
+                              titleColor
+                            )}>
+                              {title}
+                            </p>
+                            {!notif.dismissed && (
+                              <span className={cn(
+                                "px-1.5 py-0.5 text-[7px] text-white font-black rounded-md animate-pulse",
+                                newBadgeBg
+                              )}>NEW</span>
+                            )}
+                          </div>
+                          <span className="text-[9px] font-bold text-slate-400">
+                            {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-                        <span className="text-[9px] font-bold text-slate-400">
-                          {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <p className="text-sm font-black text-slate-800 leading-tight uppercase tracking-tighter mb-2">{notif.message}</p>
-                      <div className="flex items-center gap-1.5 text-[8px] font-black text-slate-400 uppercase tracking-widest">
-                        <Clock size={8} />
-                        <span>{new Date(notif.timestamp).toLocaleDateString()}</span>
+                        <p className="text-sm font-black text-slate-800 leading-tight uppercase tracking-tighter mb-2 break-words">{messageCleaned}</p>
+                        <div className="flex items-center gap-1.5 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                          <Clock size={8} />
+                          <span>{new Date(notif.timestamp).toLocaleDateString()}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="bg-white p-10 rounded-[2.5rem] shadow-xl text-center py-20 text-slate-300 border border-dashed border-slate-200">
                    <Bell size={48} className="mx-auto mb-4 opacity-10" />

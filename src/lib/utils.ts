@@ -119,16 +119,19 @@ export function getLocalIcon(type: string): string {
     return 'https://img.icons8.com/fluency/48/hospital.png';
   } else if (norm.includes('museum') || norm.includes('government')) {
     return 'https://img.icons8.com/fluency/48/museum.png';
-  } else if (norm.includes('commercial') || norm.includes('building')) {
-    return 'https://img.icons8.com/fluency/48/commercial.png';
+  } else if (norm.includes('commercial') || norm.includes('building') || norm.includes('org')) {
+    return 'https://img.icons8.com/fluency/48/enterprise.png';
   }
 
-  return 'https://img.icons8.com/fluency/48/commercial.png';
+  return 'https://img.icons8.com/fluency/48/enterprise.png';
 }
 
 export function cleanMessage(msg: string): string {
   if (!msg) return '';
-  return msg.replace(/^[\u2705\ud83c\udfe0\u26a0\ud83d\ude8c✅🏠⚠️🚌]\s*/u, '');
+  return msg
+    .replace(/^[\u2705\ud83c\udfe0\u26a0\ud83d\ude8c\ud83c\udfc1✅🏠⚠️🚌🏁📢🔔📍❌]\s*/gu, '')
+    .replace(/^\?\s*/g, '')
+    .trim();
 }
 
 

@@ -96,7 +96,7 @@ export default function AppShell({ children }: ShellProps) {
     // 2. High-Performance MySQL Sync Engine Polling Fallback (100% Standalone survival without Firestore)
     const fetchMySQLBackup = async () => {
       try {
-        let token = await firebaseAuth.currentUser?.getIdToken(true).catch(() => null);
+        let token = await firebaseAuth.currentUser?.getIdToken().catch(() => null);
         if (!token) {
           token = localStorage.getItem("expert_gps_fallback_token") || undefined;
         }

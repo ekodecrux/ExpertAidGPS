@@ -6,7 +6,7 @@ import DriverMapView from './DriverMapView';
 import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, auth, auth as firebaseAuth } from '../lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { isValidCoordinate, cn, getLocalAvatar, getUserAvatar } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -16,16 +16,33 @@ import { saveMySQLRecord } from '../lib/mysql';
 export default function DriverApp() {
   const [activeTab, setActiveTab] = useState('home');
   const { userData, logout } = useAuth();
-  const [activeTrip, setActiveTrip] = useState<any>(null);
+  const [activeTrip, _setActiveTrip] = useState<any>(null);
   const [isSelectingRoute, setIsSelectingRoute] = useState(false);
   const [orgName, setOrgName] = useState<string>('');
   const [assignedVehicleId, setAssignedVehicleId] = useState<string>('DEV-V1');
-  const [isChangingAvatar, setIsChangingAvatar] = useState(false);
-  const [driverData, setDriverData] = useState<any>(null);
-  const [driverDataLoading, setDriverDataLoading] = useState<boolean>(true);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [driverData, _setDriverData] = useState<any>(() => {
+    if (!userData) return null;
+    try {
+      const cached = localStorage.getItem(`expert_gps_user_db_data_${userData.id || userData.uid}`);
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      return null;
+    }
+  });
 
-  const avatarSeeds = ['Felix', 'Aneka', 'Caleb', 'Milo', 'Kiki', 'Jasper', 'Pumpkin', 'Luna', 'Oliver', 'Toby'];
+  const lastActionTimeRef = useRef<number>(0);
+
+  const setDriverData = (data: any) => {
+    lastActionTimeRef.current = Date.now();
+    _setDriverData(data);
+  };
+
+  const setActiveTrip = (trip: any) => {
+    lastActionTimeRef.current = Date.now();
+    _setActiveTrip(trip);
+  };
+  const [driverDataLoading, setDriverDataLoading] = useState<boolean>(!driverData);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (userData?.orgId) {
@@ -55,26 +72,11 @@ export default function DriverApp() {
           avatarUrl: base64
         });
         toast.success("Profile photo updated!");
-        setIsChangingAvatar(false);
       } catch (err) {
         toast.error("Failed to save photo");
       }
     };
     reader.readAsDataURL(file);
-  };
-
-  const handleUpdateAvatar = async (seed: string) => {
-    const currentDriverId = userData?.id || userData?.uid;
-    if (!currentDriverId) return;
-    try {
-      await saveMySQLRecord('update', 'users', currentDriverId, {
-        avatarUrl: getLocalAvatar(seed)
-      });
-      setIsChangingAvatar(false);
-      toast.success("Profile icon updated!");
-    } catch (e) {
-      toast.error("Failed to update icon");
-    }
   };
 
   const handlePasswordReset = async () => {
@@ -102,8 +104,15 @@ export default function DriverApp() {
         if (resObj.ok) {
           const res = await resObj.json();
           if (res.success) {
-            setDriverData(res);
+            // Prevent poll from overwriting optimistic state during transitions
+            if (Date.now() - lastActionTimeRef.current < 6000) {
+              console.log("[DriverApp] Skipping polling state update due to recent manual action.");
+              return;
+            }
+
+            _setDriverData(res);
             setDriverDataLoading(false);
+            localStorage.setItem(`expert_gps_user_db_data_${userData.id || userData.uid}`, JSON.stringify(res));
 
             // Set organization name from MySQL
             if (res.org?.name) {
@@ -115,7 +124,7 @@ export default function DriverApp() {
               const matchedTrip = res.trips.find(
                 (t: any) => t && (t.driverId === userData.id || t.driverId === userData.uid) && (t.status === 'live' || t.status === 'ongoing')
               );
-              setActiveTrip(matchedTrip || null);
+              _setActiveTrip(matchedTrip || null);
 
               // Set assigned vehicle ID
               const currentDriverId = userData.id || userData.uid;
@@ -205,87 +214,105 @@ export default function DriverApp() {
 
   const handleStopTrip = async () => {
     if (!activeTrip) return;
+    const tripToClose = activeTrip;
+    const vehicleId = tripToClose.vehicleId || userData?.vehicleId || 'DEV-V1';
+    
     try {
-      toast.loading("Completing trip...", { id: 'end-trip' });
-
-      let finalManifest: any[] = [];
-      const routeIdToUse = userData?.routeId || activeTrip?.routeId;
-      const token = await auth.currentUser?.getIdToken();
-      
-      if (token) {
-        const resObj = await fetch('/api/records/user-data', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        if (resObj.ok) {
-          const res = await resObj.json();
-          if (res.success && res.users) {
-            const assignedUsers = res.users.filter((u: any) => u.routeId === routeIdToUse && (u.role === 'user' || u.role === 'member'));
-            
-            // Snapshot current student states for today
-            const isToday = (dateStr: any) => {
-              if (!dateStr) return false;
-              const today = new Date().toISOString().split('T')[0];
-              return dateStr.startsWith(today);
-            };
-
-            finalManifest = assignedUsers.map((u: any) => {
-              const pickupStatus = u.pickupStatus && isToday(u.pickupUpdatedAt) ? u.pickupStatus : "waiting";
-              const dropoffStatus = u.dropoffStatus && isToday(u.dropoffUpdatedAt) ? u.dropoffStatus : "waiting";
-
-              return {
-                uid: u.uid || u.id,
-                studentId: u.studentId || u.id || "",
-                name: u.name,
-                pickupStatus,
-                dropoffStatus,
-                pickupUpdatedAt: u.pickupUpdatedAt || null,
-                dropoffUpdatedAt: u.dropoffUpdatedAt || null,
-                pickupPointId: u.pickupPointId,
-              };
-            });
-
-            const tripSummary = activeTrip.direction === 'pickup' ? 'Pick to ORG trip' : 'Drop to Home trip';
-            const manifestPromises = assignedUsers.map(async (u: any) => {
-              const existingNotifs = Array.isArray(u.notifications) ? u.notifications : [];
-              const updatedNotifs = [
-                ...existingNotifs,
-                {
-                  message: `🏁 ${tripSummary} has been completed.`,
-                  timestamp: new Date().toISOString(),
-                  type: 'trip_end',
-                  dismissed: false
-                }
-              ];
-              await saveMySQLRecord('update', 'users', u.uid || u.id, {
-                notifications: JSON.stringify(updatedNotifs)
-              }).catch(err => console.warn("Failed to update notification in MySQL for user:", u.uid || u.id, err));
-            });
-            await Promise.all(manifestPromises);
-          }
-        }
-      }
-
-      // 1. Update Trip in MySQL with complete manifest snapshot
-      await saveMySQLRecord('update', 'trips', activeTrip.id, {
-        status: 'completed',
-        endTime: new Date().toISOString(),
-        endedAt: new Date().toISOString(),
-        manifest: JSON.stringify(finalManifest)
-      });
-
-      // 2. Release Vehicle in MySQL
-      const vId = userData?.vehicleId || activeTrip?.vehicleId;
-      if (vId) {
-        await saveMySQLRecord('update', 'vehicles', vId, {
-          status: 'active'
-        }).catch(err => console.warn("Failed to update vehicle status in MySQL during end trip:", err));
-      }
-      
-      // Update local state instantly
+      // 1. Instantly trigger optimistic state updates and success notifications
       setActiveTrip(null);
+      
+      if (driverData) {
+        const updatedTrips = (driverData.trips || []).map((t: any) => {
+          if (t && t.id === tripToClose.id) {
+            return { ...t, status: 'completed', endTime: new Date().toISOString() };
+          }
+          return t;
+        });
+        _setDriverData({
+          ...driverData,
+          trips: updatedTrips
+        });
+      }
+
       toast.success("Trip completed and users notified", { id: 'end-trip' });
+
+      // 2. Perform database writes concurrently in the background
+      const runBackgroundWrites = async () => {
+        try {
+          let finalManifest: any[] = [];
+          const routeIdToUse = userData?.routeId || tripToClose?.routeId;
+          const assignedUsers = (driverData?.users || []).filter((u: any) => 
+            u && u.routeId === routeIdToUse && (u.role === 'user' || u.role === 'member')
+          );
+          
+          const isToday = (dateStr: any) => {
+            if (!dateStr) return false;
+            const today = new Date().toISOString().split('T')[0];
+            return dateStr.startsWith(today);
+          };
+
+          finalManifest = assignedUsers.map((u: any) => {
+            const pickupStatus = u.pickupStatus && isToday(u.pickupUpdatedAt) ? u.pickupStatus : "waiting";
+            const dropoffStatus = u.dropoffStatus && isToday(u.dropoffUpdatedAt) ? u.dropoffStatus : "waiting";
+
+            return {
+              uid: u.uid || u.id,
+              studentId: u.studentId || u.id || "",
+              name: u.name,
+              pickupStatus,
+              dropoffStatus,
+              pickupUpdatedAt: u.pickupUpdatedAt || null,
+              dropoffUpdatedAt: u.dropoffUpdatedAt || null,
+              pickupPointId: u.pickupPointId,
+            };
+          });
+
+          // Run Firestore and MySQL writes concurrently
+          await Promise.all([
+            saveMySQLRecord('update', 'trips', tripToClose.id, {
+              status: 'completed',
+              endTime: new Date().toISOString(),
+              endedAt: new Date().toISOString(),
+              manifest: JSON.stringify(finalManifest)
+            }),
+            updateDoc(doc(db, 'trips', tripToClose.id), {
+              status: 'completed',
+              endTime: serverTimestamp()
+            }).catch(err => console.warn("Failed to complete trip in Firestore:", err)),
+            saveMySQLRecord('update', 'vehicles', vehicleId, {
+              status: 'active'
+            }).catch(err => console.warn("Failed to update vehicle status in MySQL during end trip:", err)),
+            updateDoc(doc(db, 'vehicles', vehicleId), {
+              status: 'active'
+            }).catch(err => console.warn("Failed to update vehicle status in Firestore during end trip:", err))
+          ]);
+
+          // Notify users in the background
+          const tripSummary = tripToClose.direction === 'pickup' ? 'Pick Up' : 'Drop Off';
+          const notificationPromises = assignedUsers.map(async (u: any) => {
+            const existingNotifs = Array.isArray(u.notifications) ? u.notifications : [];
+            const updatedNotifs = [
+              ...existingNotifs,
+              {
+                message: `🏁 ${tripSummary} has been completed by ${userData.name}.`,
+                timestamp: new Date().toISOString(),
+                type: 'trip_end',
+                dismissed: false
+              }
+            ];
+            await saveMySQLRecord('update', 'users', u.uid || u.id, {
+              notifications: JSON.stringify(updatedNotifs)
+            }).catch(err => console.warn("Failed to update notification in MySQL for user:", u.uid || u.id, err));
+          });
+          await Promise.all(notificationPromises);
+        } catch (err) {
+          console.error("Background end trip writes error:", err);
+        }
+      };
+
+      // Execute background sync non-blockingly
+      runBackgroundWrites();
+
     } catch (e: any) {
       console.error("Error stopping trip:", e);
       toast.error("Failed to complete trip properly", { id: 'end-trip' });
@@ -354,16 +381,26 @@ export default function DriverApp() {
   const renderContent = () => {
     switch (activeTab) {
       case 'home':
-        return <DriverDashboard driverData={driverData} driverDataLoading={driverDataLoading} />;
+        return (
+          <DriverDashboard 
+            driverData={driverData} 
+            setDriverData={setDriverData}
+            driverDataLoading={driverDataLoading}
+            activeTrip={activeTrip}
+            setActiveTrip={setActiveTrip}
+          />
+        );
       case 'routes':
         return <DriverRoutesView driverData={driverData} driverDataLoading={driverDataLoading} />;
       case 'map':
         return (
           <DriverMapView 
             activeTrip={activeTrip} 
+            setActiveTrip={setActiveTrip}
             isSelectingRoute={isSelectingRoute}
             setIsSelectingRoute={setIsSelectingRoute}
             driverData={driverData}
+            setDriverData={setDriverData}
             driverDataLoading={driverDataLoading}
           />
         );
@@ -386,55 +423,12 @@ export default function DriverApp() {
                     onChange={handleFileUpload} 
                   />
                   <button 
-                    onClick={() => setIsChangingAvatar(!isChangingAvatar)}
+                    onClick={() => fileInputRef.current?.click()}
                     className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Camera className="text-white w-8 h-8" />
                   </button>
                 </div>
-                {isChangingAvatar && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="absolute top-full left-1/2 -translate-x-1/2 mt-4 bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 z-50 w-[85vw]"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Profile Icon</span>
-                      <button onClick={() => setIsChangingAvatar(false)} className="text-slate-400">✕</button>
-                    </div>
-
-                    <div className="space-y-6">
-                      <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full flex items-center gap-4 p-4 bg-blue-50 border border-blue-100 rounded-2xl text-blue-700 active:scale-95 transition-all"
-                      >
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                          <Camera size={18} />
-                        </div>
-                        <div className="text-left">
-                          <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">Upload Photo</p>
-                          <p className="text-[8px] font-bold opacity-60">From your device</p>
-                        </div>
-                        <ChevronRight size={16} className="ml-auto" />
-                      </button>
-
-                      <div className="space-y-3">
-                        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Or choose an avatar</p>
-                        <div className="grid grid-cols-5 gap-3">
-                          {avatarSeeds.map(seed => (
-                            <button 
-                              key={seed} 
-                              onClick={() => handleUpdateAvatar(seed)}
-                              className="w-10 h-10 rounded-xl bg-slate-50 overflow-hidden border border-slate-100 active:scale-90 transition-all"
-                            >
-                              <img src={getLocalAvatar(seed)} className="w-full h-full" />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
               </div>
               <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight leading-none">{userData?.name}</h2>
               <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-2 px-6 py-1.5 bg-blue-50 rounded-full border border-blue-100">Professional Driver</p>
@@ -515,7 +509,15 @@ export default function DriverApp() {
           </div>
         );
       default:
-        return <DriverDashboard />;
+        return (
+          <DriverDashboard 
+            driverData={driverData} 
+            setDriverData={setDriverData}
+            driverDataLoading={driverDataLoading}
+            activeTrip={activeTrip}
+            setActiveTrip={setActiveTrip}
+          />
+        );
     }
   };
 
