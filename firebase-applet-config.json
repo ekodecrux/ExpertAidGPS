@@ -1,0 +1,10 @@
+{
+  "projectId": "expertaidgps",
+  "appId": "1:954182664351:android:e4a600cd2494d5a31722aa",
+  "apiKey": "AIzaSyAhGPG4H3o1zVpH3nIS558BrCDwlvcEoSQ",
+  "authDomain": "expertaidgps.firebaseapp.com",
+  "firestoreDatabaseId": "remixed-firestore-database-id",
+  "storageBucket": "expertaidgps.firebasestorage.app",
+  "messagingSenderId": "954182664351",
+  "measurementId": ""
+}

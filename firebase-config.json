@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "954182664351",
+    "project_id": "expertaidgps",
+    "storage_bucket": "expertaidgps.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:954182664351:android:e4a600cd2494d5a31722aa",
+        "android_client_info": {
+          "package_name": "com.expertaid.gpstracking"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhGPG4H3o1zVpH3nIS558BrCDwlvcEoSQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

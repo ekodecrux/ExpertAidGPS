@@ -1,0 +1,184 @@
+{
+  "organizations": [
+    {
+      "id": "demo-school",
+      "name": "Expert Transport Academy",
+      "sector": "Education",
+      "mobile": "+91 9876543210",
+      "email": "admin@demo-school.com",
+      "logoUrl": "",
+      "address": "Cyber Towers, Hitech City, Hyderabad, Telangana, India",
+      "plan": "premium",
+      "status": "active",
+      "totalPaidAmount": 7500,
+      "price": 499,
+      "onboardDate": "2026-07-04T10:41:01.397Z",
+      "expiryDate": "2027-07-04T10:41:01.397Z",
+      "latitude": 17.4504,
+      "longitude": 78.3808,
+      "eduType": "school"
+    }
+  ],
+  "users": [
+    {
+      "uid": "demo-org-admin",
+      "email": "admin@demo-school.com",
+      "name": "Organization Admin",
+      "phone": "+91 9876543210",
+      "role": "org_admin",
+      "orgId": "demo-school",
+      "routeId": "",
+      "vehicleId": "",
+      "pickupPointId": "",
+      "studentId": "",
+      "updatedAt": "2026-07-04T10:41:01.397Z",
+      "status": "active",
+      "statusUpdatedAt": "2026-07-04T10:41:01.397Z",
+      "pickupStatus": "",
+      "pickupUpdatedAt": "",
+      "dropoffStatus": "",
+      "dropoffUpdatedAt": "",
+      "pickedAt": "",
+      "classId": "",
+      "section": "",
+      "avatarUrl": "",
+      "notifications": "[]"
+    },
+    {
+      "uid": "demo-driver",
+      "email": "driver@example.com",
+      "name": "Suresh Kumar",
+      "phone": "+91 9876543210",
+      "role": "driver",
+      "orgId": "demo-school",
+      "routeId": "demo-route-1",
+      "vehicleId": "demo-vehicle-1",
+      "pickupPointId": "",
+      "studentId": "",
+      "updatedAt": "2026-07-04T10:41:01.397Z",
+      "status": "active",
+      "statusUpdatedAt": "2026-07-04T10:41:01.397Z",
+      "pickupStatus": "",
+      "pickupUpdatedAt": "",
+      "dropoffStatus": "",
+      "dropoffUpdatedAt": "",
+      "pickedAt": "",
+      "classId": "",
+      "section": "",
+      "avatarUrl": "",
+      "notifications": "[]"
+    },
+    {
+      "uid": "demo-student",
+      "email": "student@example.com",
+      "name": "Aarav Pendyala",
+      "phone": "+91 9123456789",
+      "role": "student",
+      "orgId": "demo-school",
+      "routeId": "demo-route-1",
+      "vehicleId": "demo-vehicle-1",
+      "pickupPointId": "stop-1",
+      "studentId": "STU-2026-001",
+      "updatedAt": "2026-07-04T10:41:01.397Z",
+      "status": "waiting",
+      "statusUpdatedAt": "2026-07-04T10:41:01.397Z",
+      "pickupStatus": "waiting",
+      "pickupUpdatedAt": "2026-07-04T10:41:01.397Z",
+      "dropoffStatus": "pending",
+      "dropoffUpdatedAt": "2026-07-04T10:41:01.397Z",
+      "pickedAt": "",
+      "classId": "class-1",
+      "section": "A",
+      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200",
+      "notifications": "[]"
+    }
+  ],
+  "vehicles": [
+    {
+      "id": "DEV-V1",
+      "orgId": "demo-school",
+      "name": "",
+      "number": "",
+      "type": "",
+      "capacity": 0,
+      "status": "",
+      "latitude": 17.50444488829896,
+      "longitude": 78.30928001449867,
+      "lastUpdated": "2026-07-04T10:45:21.375Z"
+    },
+    {
+      "id": "demo-vehicle-1",
+      "orgId": "demo-school",
+      "name": "Yellow Bus 101",
+      "number": "TS 08 EX 9999",
+      "type": "Bus",
+      "capacity": 40,
+      "status": "active",
+      "latitude": 17.50420875819672,
+      "longitude": 78.30928217213115,
+      "lastUpdated": "2026-07-04T10:41:01.397Z"
+    }
+  ],
+  "routes": [
+    {
+      "id": "demo-route-1",
+      "orgId": "demo-school",
+      "name": "Hitech City Route",
+      "startPoint": "Gachibowli Circle",
+      "endPoint": "Cyber Towers",
+      "distance": "12.5 km",
+      "pickupPoints": "[{\"id\":\"stop-1\",\"name\":\"Gachibowli Circle\",\"lat\":17.4402,\"lng\":78.3482,\"time\":\"08:00 AM\"},{\"id\":\"stop-2\",\"name\":\"DLF Cybercity\",\"lat\":17.4485,\"lng\":78.3561,\"time\":\"08:10 AM\"},{\"id\":\"stop-3\",\"name\":\"Kondapur X Roads\",\"lat\":17.4572,\"lng\":78.3689,\"time\":\"08:20 AM\"},{\"id\":\"ORG\",\"name\":\"Cyber Towers, Hitech City\",\"lat\":17.4504,\"lng\":78.3808,\"time\":\"08:35 AM\"}]",
+      "stops": "[{\"id\":\"stop-1\",\"name\":\"Gachibowli Circle\",\"lat\":17.4402,\"lng\":78.3482,\"time\":\"08:00 AM\"},{\"id\":\"stop-2\",\"name\":\"DLF Cybercity\",\"lat\":17.4485,\"lng\":78.3561,\"time\":\"08:10 AM\"},{\"id\":\"stop-3\",\"name\":\"Kondapur X Roads\",\"lat\":17.4572,\"lng\":78.3689,\"time\":\"08:20 AM\"},{\"id\":\"ORG\",\"name\":\"Cyber Towers, Hitech City\",\"lat\":17.4504,\"lng\":78.3808,\"time\":\"08:35 AM\"}]"
+    }
+  ],
+  "trips": [
+    {
+      "id": "demo-trip-1",
+      "orgId": "demo-school",
+      "driverId": "demo-driver",
+      "vehicleId": "demo-vehicle-1",
+      "routeId": "demo-route-1",
+      "status": "active",
+      "direction": "pickup",
+      "startAddress": "Gachibowli Circle",
+      "endAddress": "Expert Transport Academy campus",
+      "startTime": "2026-07-04T10:41:01.397Z",
+      "endTime": "",
+      "currentLat": 17.4402,
+      "currentLng": 78.3482,
+      "currentStopId": "stop-1",
+      "eta": "5 mins",
+      "manifest": "[{\"studentId\":\"demo-student\",\"name\":\"Aarav Pendyala\",\"status\":\"waiting\",\"direction\":\"pickup\"}]"
+    }
+  ],
+  "logs": [
+    {
+      "id": "log-1",
+      "entity": "system",
+      "action": "initialize",
+      "description": "Emulated MySQL DB Failover engine successfully loaded",
+      "organization": "demo-school",
+      "operator": "System Agent",
+      "timestamp": "2026-07-04T10:41:01.397Z"
+    }
+  ],
+  "payments": [
+    {
+      "id": "pay-1",
+      "orgId": "demo-school",
+      "amount": 7500,
+      "paymentMode": "stripe",
+      "transactionId": "tx_emulated_928172",
+      "note": "Subscription Payment",
+      "timestamp": "2026-07-04T10:41:01.397Z"
+    }
+  ],
+  "classes": [
+    {
+      "id": "class-1",
+      "orgId": "demo-school",
+      "name": "Grade 10",
+      "sections": "A,B,C"
+    }
+  ]
+}
