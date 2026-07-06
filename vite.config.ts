@@ -24,7 +24,7 @@ export default defineConfig(({mode}) => {
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       middlewareMode: true,
-      allowedHosts: ['3000-ik4f3whs8b241nuyapksq-e462c04b.sg1.manus.computer', 'localhost', '127.0.0.1'],
+      allowedHosts: ['localhost', '127.0.0.1', '.manus.computer'],
     },
   };
 });
