@@ -38,7 +38,20 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  const notifications = userData?.notifications || [];
+  // Parse notifications if it's a string (from MySQL serialization)
+  let notifications: any[] = [];
+  if (userData?.notifications) {
+    if (typeof userData.notifications === 'string') {
+      try {
+        notifications = JSON.parse(userData.notifications);
+      } catch (e) {
+        console.warn('Failed to parse notifications string:', e);
+        notifications = [];
+      }
+    } else if (Array.isArray(userData.notifications)) {
+      notifications = userData.notifications;
+    }
+  }
   const activeNotifications = notifications.filter((n: any) => !n.dismissed);
   const hasUnread = activeNotifications.length > 0; 
 
@@ -85,7 +98,21 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   const handleDismissAll = async () => {
     if (!userData || !userData.notifications) return;
     try {
-      const updatedNotifs = userData.notifications.map(n => ({ ...n, dismissed: true }));
+      // Parse notifications if it's a string
+      let notifArray: any[] = [];
+      if (typeof userData.notifications === 'string') {
+        try {
+          notifArray = JSON.parse(userData.notifications);
+        } catch (e) {
+          console.warn('Failed to parse notifications string:', e);
+          return;
+        }
+      } else if (Array.isArray(userData.notifications)) {
+        notifArray = userData.notifications;
+      } else {
+        return;
+      }
+      const updatedNotifs = notifArray.map(n => ({ ...n, dismissed: true }));
       
       // Update both MySQL and Firestore to ensure perfect sync
       await Promise.all([

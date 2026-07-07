@@ -44,10 +44,26 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
   useEffect(() => {
     if (!userData) return;
     const uData = userData as any;
-    if (!uData.notifications || uData.notifications.length === 0) return;
+    
+    // Parse notifications if it's a string
+    let notifArray: any[] = [];
+    if (uData.notifications) {
+      if (typeof uData.notifications === 'string') {
+        try {
+          notifArray = JSON.parse(uData.notifications);
+        } catch (e) {
+          console.warn('Failed to parse notifications string:', e);
+          notifArray = [];
+        }
+      } else if (Array.isArray(uData.notifications)) {
+        notifArray = uData.notifications;
+      }
+    }
+    
+    if (!notifArray || notifArray.length === 0) return;
 
     // Check recent notifications for any new undismissed ones
-    uData.notifications.forEach((notif: any) => {
+    notifArray.forEach((notif: any) => {
       if (notif.dismissed) return;
       
       const notifTime = new Date(notif.timestamp).getTime();
@@ -826,20 +842,49 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
               Live Feed
             </h4>
             <div className="h-px flex-1 mx-4 bg-slate-800"></div>
-            {(userData as any)?.notifications?.filter((n: any) => !n.dismissed).length > 0 && (
-              <span className="text-[9px] font-black bg-blue-600/20 text-blue-400 px-2.5 py-1 rounded-full uppercase tracking-widest border border-blue-600/30">
-                {(userData as any).notifications.filter((n: any) => !n.dismissed).length} New
-              </span>
-            )}
+            {(() => {
+              let notifArray: any[] = [];
+              if ((userData as any)?.notifications) {
+                if (typeof (userData as any).notifications === 'string') {
+                  try {
+                    notifArray = JSON.parse((userData as any).notifications);
+                  } catch (e) {
+                    notifArray = [];
+                  }
+                } else if (Array.isArray((userData as any).notifications)) {
+                  notifArray = (userData as any).notifications;
+                }
+              }
+              const unreadCount = notifArray.filter((n: any) => !n.dismissed).length;
+              return unreadCount > 0 && (
+                <span className="text-[9px] font-black bg-blue-600/20 text-blue-400 px-2.5 py-1 rounded-full uppercase tracking-widest border border-blue-600/30">
+                  {unreadCount} New
+                </span>
+              );
+            })()}
           </div>
           <div className="space-y-4">
-            {(userData as any)?.notifications?.length > 0 ? (
-              (userData as any).notifications.slice(-3).reverse().map((n: any, i: number) => (
-                <AlertItem key={i} text={cleanMessage(n.message)} time={new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toUpperCase()} />
-              ))
-            ) : (
-              <p className="text-[10px] text-slate-500 font-black uppercase text-center py-4">No recent activity</p>
-            )}
+            {(() => {
+              let notifArray: any[] = [];
+              if ((userData as any)?.notifications) {
+                if (typeof (userData as any).notifications === 'string') {
+                  try {
+                    notifArray = JSON.parse((userData as any).notifications);
+                  } catch (e) {
+                    notifArray = [];
+                  }
+                } else if (Array.isArray((userData as any).notifications)) {
+                  notifArray = (userData as any).notifications;
+                }
+              }
+              return notifArray.length > 0 ? (
+                notifArray.slice(-3).reverse().map((n: any, i: number) => (
+                  <AlertItem key={i} text={cleanMessage(n.message)} time={new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toUpperCase()} />
+                ))
+              ) : (
+                <p className="text-[10px] text-slate-500 font-black uppercase text-center py-4">No recent activity</p>
+              );
+            })()}
           </div>
           
           <button className="w-full mt-8 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors group/btn">
