@@ -1003,6 +1003,14 @@ async function start() {
     }
 
     const token = authHeader.split("Bearer ")[1];
+    
+    // Add timeout to prevent hanging requests
+    const timeoutId = setTimeout(() => {
+      if (!res.headersSent) {
+        res.status(408).json({ success: false, error: "Request timeout. Please try again." });
+      }
+    }, 8000); // 8 second timeout
+    
     try {
       const decodedToken = await verifyTokenResilient(token);
       const isSuperAdminByEmail = decodedToken.email?.toLowerCase() === "ravikumarpendyala9182@gmail.com";
@@ -1094,8 +1102,10 @@ async function start() {
         }
       }
 
+      clearTimeout(timeoutId);
       return res.json({ success: true, userData: { ...userRow, id: userRow.uid, forcePasswordChange } });
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error("Token verification failed in verify-user api:", error);
       return res.status(401).json({ success: false, error: "Invalid token or session expired." });
     }
