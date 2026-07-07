@@ -1139,18 +1139,38 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDriver) return;
+    setCreating(true);
+    const loadingToast = toast.loading('Updating driver profile...');
     try {
-      await saveMySQLRecord('update', 'users', editingDriver.uid || editingDriver.id, {
-        name: editingDriver.name,
-        phone: editingDriver.phone || '',
-        licenseNumber: editingDriver.licenseNumber || ''
+      const token = await user?.getIdToken();
+      const response = await fetch('/api/admin/update-user-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          uid: editingDriver.uid || editingDriver.id,
+          name: editingDriver.name,
+          email: editingDriver.email,
+          phone: editingDriver.phone || '',
+          licenseNumber: editingDriver.licenseNumber || ''
+        })
       });
-      toast.success('Driver profile updated successfully');
+
+      const resData = await response.json();
+      if (!response.ok) {
+        throw new Error(resData.error || 'Update failed');
+      }
+
+      toast.success('Driver profile updated successfully', { id: loadingToast });
       setIsEditModalOpen(false);
       setEditingDriver(null);
       if (onRefresh) onRefresh();
     } catch (e: any) {
-      toast.error(e.message || 'Update failed');
+      toast.error(e.message || 'Update failed', { id: loadingToast });
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -1399,6 +1419,10 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">Full Name</label>
                 <input required type="text" value={editingDriver.name} onChange={e => setEditingDriver({...editingDriver, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">Email Address</label>
+                <input required type="email" value={editingDriver.email || ''} onChange={e => setEditingDriver({...editingDriver, email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -2465,7 +2489,14 @@ function RoutesList({ routes, vehicles, drivers, members, orgId, memberLabel, me
 
     const timeout = setTimeout(async () => {
       try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=8&addressdetails=1&countrycodes=in&viewbox=78.2,17.2,78.6,17.6`);
+        const center = org?.location && isValidCoordinate(org.location.lat, org.location.lng) 
+          ? org.location 
+          : { lat: 17.4504, lng: 78.3808 };
+        const left = center.lng - 1.0;
+        const right = center.lng + 1.0;
+        const top = center.lat + 1.0;
+        const bottom = center.lat - 1.0;
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=15&addressdetails=1&countrycodes=in&viewbox=${left},${top},${right},${bottom}`);
         const data = await response.json();
         setSuggestions(data || []);
       } catch (e) {
@@ -2474,7 +2505,7 @@ function RoutesList({ routes, vehicles, drivers, members, orgId, memberLabel, me
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [searchQuery]);
+  }, [searchQuery, org]);
 
   const handlePastedUrl = (url: string) => {
     // Regex for Google Maps coordinates
@@ -2536,7 +2567,14 @@ function RoutesList({ routes, vehicles, drivers, members, orgId, memberLabel, me
 
     setIsSearching(true);
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryToUse)}&limit=1&addressdetails=1&countrycodes=in&viewbox=78.2,17.2,78.6,17.6`);
+      const center = org?.location && isValidCoordinate(org.location.lat, org.location.lng) 
+        ? org.location 
+        : { lat: 17.4504, lng: 78.3808 };
+      const left = center.lng - 1.0;
+      const right = center.lng + 1.0;
+      const top = center.lat + 1.0;
+      const bottom = center.lat - 1.0;
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryToUse)}&limit=1&addressdetails=1&countrycodes=in&viewbox=${left},${top},${right},${bottom}`);
       const data = await response.json();
       if (data && data.length > 0) {
         const { lat, lon, display_name } = data[0];
@@ -3189,7 +3227,14 @@ function RoutesList({ routes, vehicles, drivers, members, orgId, memberLabel, me
                         onBlur={async () => {
                           if (!newRoute.startCoord && newRoute.start) {
                             try {
-                              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(newRoute.start)}&limit=1&countrycodes=in&viewbox=78.2,17.2,78.6,17.6`);
+                              const center = org?.location && isValidCoordinate(org.location.lat, org.location.lng) 
+                                ? org.location 
+                                : { lat: 17.4504, lng: 78.3808 };
+                              const left = center.lng - 1.0;
+                              const right = center.lng + 1.0;
+                              const top = center.lat + 1.0;
+                              const bottom = center.lat - 1.0;
+                              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(newRoute.start)}&limit=1&countrycodes=in&viewbox=${left},${top},${right},${bottom}`);
                               const data = await res.json();
                               if (data && data.length > 0) {
                                 setNewRoute(prev => ({ ...prev, startCoord: { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } }));
@@ -3227,7 +3272,14 @@ function RoutesList({ routes, vehicles, drivers, members, orgId, memberLabel, me
                         onBlur={async () => {
                           if (!newRoute.endCoord && newRoute.end) {
                             try {
-                              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(newRoute.end)}&limit=1&countrycodes=in&viewbox=78.2,17.2,78.6,17.6`);
+                              const center = org?.location && isValidCoordinate(org.location.lat, org.location.lng) 
+                                ? org.location 
+                                : { lat: 17.4504, lng: 78.3808 };
+                              const left = center.lng - 1.0;
+                              const right = center.lng + 1.0;
+                              const top = center.lat + 1.0;
+                              const bottom = center.lat - 1.0;
+                              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(newRoute.end)}&limit=1&countrycodes=in&viewbox=${left},${top},${right},${bottom}`);
                               const data = await res.json();
                               if (data && data.length > 0) {
                                 setNewRoute(prev => ({ ...prev, endCoord: { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } }));
@@ -3607,7 +3659,14 @@ function RoutesList({ routes, vehicles, drivers, members, orgId, memberLabel, me
                         onBlur={async () => {
                           if (!editingRoute.startCoord && editingRoute.start) {
                             try {
-                              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(editingRoute.start)}&limit=1&countrycodes=in&viewbox=78.2,17.2,78.6,17.6`);
+                              const center = org?.location && isValidCoordinate(org.location.lat, org.location.lng) 
+                                ? org.location 
+                                : { lat: 17.4504, lng: 78.3808 };
+                              const left = center.lng - 1.0;
+                              const right = center.lng + 1.0;
+                              const top = center.lat + 1.0;
+                              const bottom = center.lat - 1.0;
+                              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(editingRoute.start)}&limit=1&countrycodes=in&viewbox=${left},${top},${right},${bottom}`);
                               const data = await res.json();
                               if (data && data.length > 0) {
                                 setEditingRoute((prev: any) => ({ ...prev, startCoord: { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } }));
@@ -3644,7 +3703,14 @@ function RoutesList({ routes, vehicles, drivers, members, orgId, memberLabel, me
                         onBlur={async () => {
                           if (!editingRoute.endCoord && editingRoute.end) {
                             try {
-                              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(editingRoute.end)}&limit=1&countrycodes=in&viewbox=78.2,17.2,78.6,17.6`);
+                              const center = org?.location && isValidCoordinate(org.location.lat, org.location.lng) 
+                                ? org.location 
+                                : { lat: 17.4504, lng: 78.3808 };
+                              const left = center.lng - 1.0;
+                              const right = center.lng + 1.0;
+                              const top = center.lat + 1.0;
+                              const bottom = center.lat - 1.0;
+                              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(editingRoute.end)}&limit=1&countrycodes=in&viewbox=${left},${top},${right},${bottom}`);
                               const data = await res.json();
                               if (data && data.length > 0) {
                                 setEditingRoute((prev: any) => ({ ...prev, endCoord: { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } }));
@@ -6503,20 +6569,6 @@ function Settings({ org, classes, orgId, isEducation, isCollege, members, onRefr
           lng: newLng
         });
       }
-      
-      // Auto-populate search box with current address if empty
-      if (!orgSearchQuery && !isInputFocused) {
-        setShouldSearchSuggestions(false);
-        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${org.location.lat}&lon=${org.location.lng}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data && data.display_name && !isInputFocused) {
-              setOrgSearchQuery(data.display_name.split(',')[0]);
-              setOrgSuggestions([]);
-            }
-          })
-          .catch(err => console.warn('Reverse geocode on mount failed', err));
-      }
     }
   }, [org?.id, org?.location?.lat, org?.location?.lng, isInputFocused]);
 
@@ -6528,7 +6580,14 @@ function Settings({ org, classes, orgId, isEducation, isCollege, members, onRefr
 
     const timeout = setTimeout(async () => {
       try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(orgSearchQuery)}&limit=8&addressdetails=1&countrycodes=in&viewbox=78.2,17.2,78.6,17.6`);
+        const center = org?.location && isValidCoordinate(org.location.lat, org.location.lng) 
+          ? org.location 
+          : { lat: 17.4504, lng: 78.3808 };
+        const left = center.lng - 1.0;
+        const right = center.lng + 1.0;
+        const top = center.lat + 1.0;
+        const bottom = center.lat - 1.0;
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(orgSearchQuery)}&limit=15&addressdetails=1&countrycodes=in&viewbox=${left},${top},${right},${bottom}`);
         const data = await response.json();
         // Double check input is still focused and we still want suggestions
         if (shouldSearchSuggestions && isInputFocused) {
@@ -6540,7 +6599,7 @@ function Settings({ org, classes, orgId, isEducation, isCollege, members, onRefr
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [orgSearchQuery, shouldSearchSuggestions, isInputFocused]);
+  }, [orgSearchQuery, shouldSearchSuggestions, isInputFocused, org]);
 
   const handleSelectOrgSuggestion = (s: any) => {
     setShouldSearchSuggestions(false);
@@ -6901,7 +6960,14 @@ function Settings({ org, classes, orgId, isEducation, isCollege, members, onRefr
                           try {
                             setShouldSearchSuggestions(false);
                             setIsOrgSearching(true);
-                            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(orgSearchQuery)}&limit=1&addressdetails=1&countrycodes=in&viewbox=78.2,17.2,78.6,17.6`);
+                            const center = org?.location && isValidCoordinate(org.location.lat, org.location.lng) 
+                              ? org.location 
+                              : { lat: 17.4504, lng: 78.3808 };
+                            const left = center.lng - 1.0;
+                            const right = center.lng + 1.0;
+                            const top = center.lat + 1.0;
+                            const bottom = center.lat - 1.0;
+                            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(orgSearchQuery)}&limit=1&addressdetails=1&countrycodes=in&viewbox=${left},${top},${right},${bottom}`);
                             const data = await response.json();
                             if (data && data.length > 0) {
                               handleSelectOrgSuggestion(data[0]);
