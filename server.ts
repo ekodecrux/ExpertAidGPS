@@ -1753,6 +1753,149 @@ async function start() {
     }
   });
 
+  app.post("/api/admin/update-user-profile", verifyAdmin, async (req, res) => {
+    try {
+      const admin = (req as any).user;
+      let { uid, email, name, phone, licenseNumber } = req.body;
+      if (!uid) {
+        return res.status(400).json({ error: "Missing required parameter: uid" });
+      }
+
+      // 1. Fetch current user from MySQL or Firestore
+      let userData: any = null;
+      let conn: any = null;
+      try {
+        conn = await getMySQLConnection();
+        const [rows] = await conn.query("SELECT * FROM users WHERE uid = ?", [uid]) as any[];
+        if (rows && rows.length > 0) {
+          userData = rows[0];
+        }
+      } catch (mysqlErr: any) {
+        console.warn("[update-user-profile] MySQL lookup failed:", mysqlErr.message);
+      } finally {
+        if (conn) {
+          try { await conn.end(); } catch (e) {}
+        }
+      }
+
+      if (!userData) {
+        try {
+          const userDoc = await firestoreDb.collection("users").doc(uid).get();
+          if (userDoc.exists) {
+            userData = userDoc.data();
+          }
+        } catch (fsErr: any) {
+          console.error("[update-user-profile] Firestore lookup failed:", fsErr.message);
+        }
+      }
+
+      if (!userData) {
+        return res.status(404).json({ error: "User profile not found" });
+      }
+
+      // Security Check: Org Admin can only edit users of their own organization
+      if (!admin.isSuperAdmin && admin.orgId !== userData.orgId) {
+        return res.status(403).json({ error: "Forbidden: Organization mismatch" });
+      }
+
+      // 2. Prepare update data for auth & database
+      const updates: any = {};
+      const dbUpdates: any = {};
+
+      if (email !== undefined) {
+        const cleanedEmail = email.trim().toLowerCase();
+        if (cleanedEmail !== userData.email) {
+          updates.email = cleanedEmail;
+          dbUpdates.email = cleanedEmail;
+          
+          // Verify email is unique if being updated
+          try {
+            const existingAuthUser = await auth.getUserByEmail(cleanedEmail);
+            if (existingAuthUser.uid !== uid) {
+              return res.status(400).json({ error: "Email already exists" });
+            }
+          } catch (err: any) {
+            if (err.code !== 'auth/user-not-found') {
+              throw err;
+            }
+          }
+        }
+      }
+
+      if (name !== undefined) {
+        updates.displayName = name;
+        dbUpdates.name = name;
+      }
+
+      const formattedPhone = formatPhoneNumber(phone);
+      if (phone !== undefined) {
+        // Only update phone in auth if format is valid and different
+        if (formattedPhone) {
+          updates.phoneNumber = formattedPhone;
+        }
+        dbUpdates.phone = phone || '';
+      }
+
+      if (licenseNumber !== undefined) {
+        dbUpdates.licenseNumber = licenseNumber || '';
+      }
+
+      // 3. Update Firebase Auth user
+      if (Object.keys(updates).length > 0) {
+        try {
+          await auth.updateUser(uid, updates);
+        } catch (authErr: any) {
+          console.error("[update-user-profile] Auth update error:", authErr);
+          if (authErr.code === 'auth/email-already-exists') {
+            return res.status(400).json({ error: "Email already exists" });
+          }
+          if (authErr.code === 'auth/phone-number-already-exists') {
+            // If phone number already exists, save to DB but skip auth phone update
+            delete updates.phoneNumber;
+            if (Object.keys(updates).length > 0) {
+              await auth.updateUser(uid, updates);
+            }
+          } else {
+            return res.status(400).json({ error: authErr.message || "Failed to update authentication account" });
+          }
+        }
+      }
+
+      // 4. Update MySQL Database
+      if (Object.keys(dbUpdates).length > 0) {
+        try {
+          conn = await getMySQLConnection();
+          const sets: string[] = [];
+          const params: any[] = [];
+          Object.entries(dbUpdates).forEach(([key, val]) => {
+            sets.push(`\`${key}\` = ?`);
+            params.push(val);
+          });
+          params.push(uid);
+          await conn.query(`UPDATE users SET ${sets.join(', ')} WHERE uid = ?`, params);
+        } catch (mysqlErr: any) {
+          console.error("[update-user-profile] MySQL update failed:", mysqlErr.message);
+        } finally {
+          if (conn) {
+            try { await conn.end(); } catch (e) {}
+          }
+        }
+
+        // 5. Update Firestore asynchronously
+        try {
+          await firestoreDb.collection("users").doc(uid).set(dbUpdates, { merge: true });
+        } catch (fsErr: any) {
+          console.warn("[update-user-profile] Firestore update failed:", fsErr.message);
+        }
+      }
+
+      return res.json({ success: true, message: "User profile updated successfully" });
+    } catch (e: any) {
+      console.error("[update-user-profile] error:", e);
+      return res.status(500).json({ error: e.message || "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/resend-creds", verifyAdmin, async (req, res) => {
     try {
       const admin = (req as any).user;
