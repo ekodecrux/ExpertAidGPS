@@ -4993,7 +4993,7 @@ async function start() {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     // Catch-all route for SPA - must be LAST after all API routes
-    app.get("*", (req, res) => {
+    app.use((req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
