@@ -308,6 +308,14 @@ async function start() {
 
   // Health check
   app.get("/api/health", (req, res) => res.json({ status: "alive" }));
+  
+  // API 404 handler - must be after all specific API routes but before catch-all
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: "API route not found" });
+    }
+    next();
+  });
 
   // Get MySQL connection config from settings doc or environment with aggressive memory-caching
   let cachedMySQLConfig: any = null;
@@ -4984,10 +4992,8 @@ async function start() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*all", (req, res) => {
-      if (req.originalUrl.startsWith('/api')) {
-        return res.status(404).json({ error: "API route not found" });
-      }
+    // Catch-all route for SPA - must be LAST after all API routes
+    app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
