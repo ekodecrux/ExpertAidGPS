@@ -1,0 +1,103 @@
+name: Build for Play Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'App version (e.g., 1.0.1)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      
+      - name: Install pnpm
+        run: npm install -g pnpm
+      
+      - name: Install dependencies
+        run: pnpm install
+      
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      
+      - name: Update version numbers
+        run: |
+          # Update capacitor.config.ts
+          sed -i "s/version: '[^']*'/version: '${{ github.event.inputs.version }}'/g" capacitor.config.ts
+          
+          # Update build.gradle
+          VERSION_CODE=$(date +%s | cut -c 6-10)
+          sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/g" android/app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"${{ github.event.inputs.version }}\"/g" android/app/build.gradle
+      
+      - name: Build web app
+        run: pnpm run build
+      
+      - name: Sync Capacitor
+        run: npx cap sync android
+      
+      - name: Decode signing key
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/expertgps-release-key.jks
+      
+      - name: Build AAB
+        run: |
+          cd android
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=expertgps-release-key.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+      
+      - name: Upload AAB to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT }}
+          packageName: com.expertgpstracking.app
+          releaseFiles: 'android/app/build/outputs/bundle/release/app-release.aab'
+          track: internal
+          status: draft
+      
+      - name: Upload AAB as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+      
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          release_name: Release ${{ github.event.inputs.version }}
+          body: |
+            ## App Version: ${{ github.event.inputs.version }}
+            
+            ### Changes
+            - See commit history for details
+            
+            ### Build Artifacts
+            - AAB file available in artifacts
+            
+            ### Next Steps
+            1. Review in Play Store Console
+            2. Add release notes
+            3. Submit for review
+          draft: false
+          prerelease: false

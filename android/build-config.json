@@ -1,0 +1,79 @@
+{
+  "app": {
+    "name": "Expert GPS Tracking",
+    "packageName": "com.expertgpstracking.app",
+    "version": "1.0.0",
+    "versionCode": 1,
+    "description": "Complete fleet management and student tracking system with real-time GPS tracking, route management, and notifications.",
+    "minSdkVersion": 24,
+    "targetSdkVersion": 34,
+    "compileSdkVersion": 34
+  },
+  "playStore": {
+    "category": "TRAVEL_AND_LOCAL",
+    "contentRating": "GENERAL_AUDIENCES",
+    "targetAudience": "Everyone",
+    "releaseNotes": "Initial release: Complete fleet management system with Driver, User, Admin, and Super Admin dashboards"
+  },
+  "features": {
+    "driver": {
+      "enabled": true,
+      "description": "Driver interface for real-time route tracking and trip management"
+    },
+    "user": {
+      "enabled": true,
+      "description": "Student/User interface for tracking pickup and dropoff status"
+    },
+    "admin": {
+      "enabled": true,
+      "description": "Organization admin dashboard for fleet management"
+    },
+    "superAdmin": {
+      "enabled": true,
+      "description": "Super admin dashboard for system-wide management"
+    }
+  },
+  "permissions": {
+    "internet": {
+      "name": "android.permission.INTERNET",
+      "reason": "Required for API communication and real-time tracking"
+    },
+    "accessNetworkState": {
+      "name": "android.permission.ACCESS_NETWORK_STATE",
+      "reason": "Required to check network connectivity"
+    },
+    "accessFineLocation": {
+      "name": "android.permission.ACCESS_FINE_LOCATION",
+      "reason": "Required for GPS tracking and location services"
+    },
+    "accessCoarseLocation": {
+      "name": "android.permission.ACCESS_COARSE_LOCATION",
+      "reason": "Required for approximate location services"
+    },
+    "camera": {
+      "name": "android.permission.CAMERA",
+      "reason": "Required for video calls and photo capture"
+    },
+    "readExternalStorage": {
+      "name": "android.permission.READ_EXTERNAL_STORAGE",
+      "reason": "Required for file access"
+    },
+    "writeExternalStorage": {
+      "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "reason": "Required for file storage"
+    }
+  },
+  "buildVariants": {
+    "debug": {
+      "minifyEnabled": false,
+      "debuggable": true,
+      "signingConfig": "debug"
+    },
+    "release": {
+      "minifyEnabled": true,
+      "shrinkResources": true,
+      "debuggable": false,
+      "signingConfig": "release"
+    }
+  }
+}
