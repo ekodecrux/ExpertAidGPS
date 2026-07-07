@@ -288,7 +288,7 @@ async function start() {
         } catch (recoverErr: any) {
           console.warn("[Start-Up Recovery] Exception occurred during driver repair:", recoverErr.message);
         }
-      })();
+      }, 1000); // Defer by 1 second to not block startup
     }
   } catch (authInitErr: any) {
     console.error("Critical: Failed to safely initialize auth reference:", authInitErr.message);
