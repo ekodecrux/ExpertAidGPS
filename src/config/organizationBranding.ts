@@ -17,8 +17,8 @@ export const organizationBrandingMap: Record<string, OrganizationBranding> = {
   expertaid: {
     id: 'expertaid',
     name: 'ExpertAid Technologies',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1024px-Amazon_logo.svg.png',
-    logoIconUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/256px-Amazon_logo.svg.png',
+    logoUrl: '/api/storage/1042_7101506_720f6944.jpg',
+    logoIconUrl: '/api/storage/EXPLOGO2024_ef451422.webp',
     primaryColor: '#5B2C8F', // Purple
     secondaryColor: '#3B9FD9', // Blue
     tagline: 'DESTINY OF EXCELLENCE',
