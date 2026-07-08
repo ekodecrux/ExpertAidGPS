@@ -17,8 +17,8 @@ export const organizationBrandingMap: Record<string, OrganizationBranding> = {
   expertaid: {
     id: 'expertaid',
     name: 'ExpertAid Technologies',
-    logoUrl: '/manus-storage/expertaid-logo-full_fdd8c1e6.jpg',
-    logoIconUrl: '/manus-storage/expertaid-logo-icon_87095ab9.webp',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1024px-Amazon_logo.svg.png',
+    logoIconUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/256px-Amazon_logo.svg.png',
     primaryColor: '#5B2C8F', // Purple
     secondaryColor: '#3B9FD9', // Blue
     tagline: 'DESTINY OF EXCELLENCE',
@@ -28,8 +28,8 @@ export const organizationBrandingMap: Record<string, OrganizationBranding> = {
   // acme: {
   //   id: 'acme',
   //   name: 'ACME Corporation',
-  //   logoUrl: '/manus-storage/acme-logo-full.jpg',
-  //   logoIconUrl: '/manus-storage/acme-logo-icon.webp',
+  //   logoUrl: 'https://example.com/acme-logo-full.jpg',
+  //   logoIconUrl: 'https://example.com/acme-logo-icon.webp',
   //   primaryColor: '#FF0000',
   //   secondaryColor: '#0000FF',
   //   tagline: 'Your Tagline Here',
@@ -39,6 +39,7 @@ export const organizationBrandingMap: Record<string, OrganizationBranding> = {
 /**
  * Get branding for an organization
  * Falls back to ExpertAid if organization not found
+ * Note: Storage URLs use /api/storage/ prefix which routes through the server's storage proxy
  */
 export function getOrganizationBranding(
   organizationId?: string

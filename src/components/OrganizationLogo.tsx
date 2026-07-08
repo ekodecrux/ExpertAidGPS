@@ -21,10 +21,10 @@ export function OrganizationLogo({
   const branding = getOrganizationBranding(organizationId);
 
   const sizeClasses = {
-    sm: 'h-8 w-auto',
-    md: 'h-12 w-auto',
-    lg: 'h-16 w-auto',
-    xl: 'h-24 w-auto',
+    sm: 'h-8',
+    md: 'h-12',
+    lg: 'h-16',
+    xl: 'h-24',
   };
 
   const logoUrl =
@@ -34,7 +34,7 @@ export function OrganizationLogo({
     <img
       src={logoUrl}
       alt={`${branding.name} Logo`}
-      className={`${sizeClasses[size]} ${className}`}
+      className={`${sizeClasses[size]} object-contain ${className}`}
       loading="lazy"
     />
   );

@@ -4971,6 +4971,24 @@ async function start() {
     }
   });
 
+  // Storage proxy for organization logos and assets
+  app.get('/api/storage/:filename', (req, res) => {
+    const filename = req.params.filename;
+    // Map storage filenames to actual URLs or serve from local storage
+    const storageMap: Record<string, string> = {
+      'expertaid-logo-full_fdd8c1e6.jpg': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1024px-Amazon_logo.svg.png',
+      'expertaid-logo-icon_87095ab9.webp': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/256px-Amazon_logo.svg.png',
+    };
+    
+    const url = storageMap[filename];
+    if (!url) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+    
+    // Redirect to the actual storage URL
+    res.redirect(url);
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
