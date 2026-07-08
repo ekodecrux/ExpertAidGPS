@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.expertgpstracking.app',
+  appId: 'com.expertaid.gpstracking',
   appName: 'Expert GPS Tracking',
   webDir: 'dist',
   version: '1.0.0',
