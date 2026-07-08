@@ -1,5 +1,5 @@
 import React from 'react';
-import { getOrganizationBranding } from '@/config/organizationBranding';
+import { getOrganizationBranding } from '../config/organizationBranding';
 
 interface OrganizationLogoProps {
   organizationId?: string;
