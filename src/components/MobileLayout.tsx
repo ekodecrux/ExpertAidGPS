@@ -7,6 +7,7 @@ import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { saveMySQLRecord } from '../lib/mysql';
 import { OrganizationIcon } from './OrganizationLogo';
+import { getOrganizationBranding } from '../config/organizationBranding';
 
 interface MobileLayoutProps {
   children: React.ReactNode;
@@ -148,7 +149,9 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
                   : (org?.sector === 'Government'
                     ? 'museum'
                     : 'commercial'));
-              const logoSrc = org?.logo || org?.logoUrl || getLocalIcon(defaultIcon);
+              // Use organization branding config if available, otherwise fall back to org data
+              const branding = org?.id ? getOrganizationBranding(org.id) : null;
+              const logoSrc = branding?.logoIconUrl || org?.logo || org?.logoUrl || getLocalIcon(defaultIcon);
               return (
                 <img src={logoSrc} alt="Org Logo" className="w-full h-full object-contain p-0.5 bg-slate-50" referrerPolicy="no-referrer" />
               );
