@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { saveMySQLRecord } from '../lib/mysql';
+import { OrganizationIcon } from './OrganizationLogo';
 
 interface MobileLayoutProps {
   children: React.ReactNode;

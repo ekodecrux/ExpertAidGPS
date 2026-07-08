@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
 import { getLocalIcon } from '../lib/utils';
 import { getBackendUrl, setBackendUrl } from '../lib/apiPatch';
+import { OrganizationLogo } from '../components/OrganizationLogo';
 
 export default function Login() {
   const { login, loginEmail } = useAuth();
@@ -218,10 +219,11 @@ export default function Login() {
       <div className="max-w-md w-full bg-white rounded-[2.25rem] shadow-xl overflow-hidden border border-slate-100/85 z-10 relative">
         <div className="p-6 pb-2 text-center">
             <div className="w-24 h-16 flex items-center justify-center mx-auto mb-4 transition-all duration-300">
-              <img 
-                src="/expertaid-logo.webp" 
-                alt="ExpertAid Technologies" 
-                className="w-full h-full object-contain" 
+              <OrganizationLogo 
+                organizationId={currentOrg?.id || 'expertaid'}
+                variant="full"
+                size="lg"
+                className="object-contain" 
               />
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight mb-0.5 text-slate-900 transition-all duration-300">{currentName}</h1>
