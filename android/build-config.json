@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Expert GPS Tracking",
-    "packageName": "com.expertgpstracking.app",
+    "packageName": "com.expertaid.gpstracking",
     "version": "1.0.0",
     "versionCode": 1,
     "description": "Complete fleet management and student tracking system with real-time GPS tracking, route management, and notifications.",
