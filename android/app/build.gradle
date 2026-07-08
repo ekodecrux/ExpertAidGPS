@@ -18,6 +18,31 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    // Define signing configs BEFORE buildTypes
+    signingConfigs {
+        release {
+            // Load signing config from key.properties file in android directory
+            def keyPropertiesFile = file('key.properties')
+            if (keyPropertiesFile.exists()) {
+                def keyProperties = new Properties()
+                keyProperties.load(new FileInputStream(keyPropertiesFile))
+                
+                keystoreFile = file(keyProperties['storeFile'])
+                keyAlias = keyProperties['keyAlias']
+                keyPassword = keyProperties['keyPassword']
+                storePassword = keyProperties['storePassword']
+            }
+        }
+        debug {
+            // Debug signing uses default debug keystore
+            storeFile = file(System.getProperty('user.home') + '/.android/debug.keystore')
+            storePassword = 'android'
+            keyAlias = 'androiddebugkey'
+            keyPassword = 'android'
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
@@ -28,28 +53,6 @@ android {
         debug {
             minifyEnabled false
             signingConfig signingConfigs.debug
-        }
-    }
-    
-    signingConfigs {
-        release {
-            // Load signing config from key.properties file
-            def keyPropertiesFile = rootProject.file('key.properties')
-            if (keyPropertiesFile.exists()) {
-                def keyProperties = new Properties()
-                keyProperties.load(new FileInputStream(keyPropertiesFile))
-                
-                keystoreFile = file(keyProperties['storeFile'])
-                keyAlias = keyProperties['keyAlias']
-                keyPassword = keyProperties['keyPassword']
-                storePassword = keyProperties['storePassword']
-            } else {
-                // Fallback for environment variables if key.properties not found
-                keystoreFile = file(System.getenv("KEYSTORE_PATH") ?: "keystore.jks")
-                keyAlias = System.getenv("KEY_ALIAS") ?: "key"
-                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
-                storePassword = System.getenv("STORE_PASSWORD") ?: ""
-            }
         }
     }
 }
