@@ -21,8 +21,8 @@ export function getBackendUrl(): string {
     return saved.trim().replace(/\/$/, '');
   }
 
-  // Default to the user's production server for public release
-  return 'https://gpstracking.expertaid.in';
+  // Default to the deployed web server
+  return 'https://expertaidgps-utabsjvh.manus.space';
 }
 
 export function setBackendUrl(url: string) {
