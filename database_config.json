@@ -1,8 +1,0 @@
-{
-  "host": "162.214.80.40",
-  "user": "ekodecru_expertgpst",
-  "password": "expertgpst@2026",
-  "database": "ekodecru_expertgpst",
-  "port": 3306,
-  "provider": "hostinger_vps"
-}

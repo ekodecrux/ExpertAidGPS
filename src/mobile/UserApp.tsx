@@ -30,27 +30,6 @@ export default function UserApp() {
   });
   const [userDbDataLoading, setUserDbDataLoading] = useState<boolean>(!userDbData);
 
-  // Helper function to parse notifications safely
-  const getNotificationsArray = (notifs: any): any[] => {
-    if (!notifs) return [];
-    if (typeof notifs === 'string') {
-      try {
-        return JSON.parse(notifs);
-      } catch (e) {
-        return [];
-      }
-    }
-    if (Array.isArray(notifs)) {
-      return notifs;
-    }
-    return [];
-  };
-
-  const hasUnreadNotifications = () => {
-    const notifArray = getNotificationsArray((userData as any)?.notifications);
-    return notifArray.some((n: any) => !n.dismissed);
-  };
-
   useEffect(() => {
     if (!userData) return;
 
@@ -181,25 +160,7 @@ export default function UserApp() {
   const dismissNotification = async (timestamp: string) => {
     if (!userData) return;
     const uData = userData as any;
-    
-    // Parse notifications if it's a string
-    let notifArray: any[] = [];
-    if (uData.notifications) {
-      if (typeof uData.notifications === 'string') {
-        try {
-          notifArray = JSON.parse(uData.notifications);
-        } catch (e) {
-          console.warn('Failed to parse notifications string:', e);
-          return;
-        }
-      } else if (Array.isArray(uData.notifications)) {
-        notifArray = uData.notifications;
-      } else {
-        return;
-      }
-    }
-    
-    const updatedNotifs = notifArray.map((n: any) => 
+    const updatedNotifs = uData.notifications.map((n: any) => 
       n.timestamp === timestamp ? { ...n, dismissed: true } : n
     );
     try {
@@ -214,25 +175,7 @@ export default function UserApp() {
   const markAllAsRead = async () => {
     if (!userData) return;
     const uData = userData as any;
-    
-    // Parse notifications if it's a string
-    let notifArray: any[] = [];
-    if (uData.notifications) {
-      if (typeof uData.notifications === 'string') {
-        try {
-          notifArray = JSON.parse(uData.notifications);
-        } catch (e) {
-          console.warn('Failed to parse notifications string:', e);
-          return;
-        }
-      } else if (Array.isArray(uData.notifications)) {
-        notifArray = uData.notifications;
-      } else {
-        return;
-      }
-    }
-    
-    const updatedNotifs = notifArray.map((n: any) => ({ ...n, dismissed: true }));
+    const updatedNotifs = uData.notifications.map((n: any) => ({ ...n, dismissed: true }));
     try {
       await saveMySQLRecord('update', 'users', userData.id || userData.uid, {
         notifications: updatedNotifs
@@ -256,26 +199,10 @@ export default function UserApp() {
   useEffect(() => {
     if (!userData) return;
     const uData = userData as any;
-    
-    // Parse notifications if it's a string
-    let notifArray: any[] = [];
-    if (uData.notifications) {
-      if (typeof uData.notifications === 'string') {
-        try {
-          notifArray = JSON.parse(uData.notifications);
-        } catch (e) {
-          console.warn('Failed to parse notifications string:', e);
-          notifArray = [];
-        }
-      } else if (Array.isArray(uData.notifications)) {
-        notifArray = uData.notifications;
-      }
-    }
-    
-    if (!notifArray || notifArray.length === 0) return;
+    if (!uData.notifications || uData.notifications.length === 0) return;
 
     // Check recent notifications for any new undismissed ones
-    notifArray.forEach((notif: any) => {
+    uData.notifications.forEach((notif: any) => {
       if (notif.dismissed) return;
       
       const notifTime = new Date(notif.timestamp).getTime();
@@ -341,7 +268,7 @@ export default function UserApp() {
       id: 'alerts', 
       label: 'Security', 
       icon: Bell,
-      badge: hasUnreadNotifications()
+      badge: (userData as any)?.notifications?.some((n: any) => !n.dismissed)
     },
     { id: 'profile', label: 'Account', icon: User },
   ];
@@ -369,8 +296,8 @@ export default function UserApp() {
               )}
             </div>
             <div className="space-y-4 pb-20">
-              {getNotificationsArray((userData as any)?.notifications).length > 0 ? (
-                getNotificationsArray((userData as any)?.notifications).slice().reverse().map((notif: any, i: number) => {
+              {(userData as any)?.notifications?.length > 0 ? (
+                (userData as any).notifications.slice().reverse().map((notif: any, i: number) => {
                   const messageCleaned = cleanMessage(notif.message);
                   const isStart = notif.type === 'trip_start' || notif.type === 'start' || notif.message?.toLowerCase().includes('started');
                   const isEnd = notif.type === 'trip_end' || notif.type === 'end' || notif.message?.toLowerCase().includes('completed');

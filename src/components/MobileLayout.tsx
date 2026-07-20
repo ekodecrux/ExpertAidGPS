@@ -6,8 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { saveMySQLRecord } from '../lib/mysql';
-import { OrganizationIcon } from './OrganizationLogo';
-import { getOrganizationBranding } from '../config/organizationBranding';
 
 interface MobileLayoutProps {
   children: React.ReactNode;
@@ -40,20 +38,7 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Parse notifications if it's a string (from MySQL serialization)
-  let notifications: any[] = [];
-  if (userData?.notifications) {
-    if (typeof userData.notifications === 'string') {
-      try {
-        notifications = JSON.parse(userData.notifications);
-      } catch (e) {
-        console.warn('Failed to parse notifications string:', e);
-        notifications = [];
-      }
-    } else if (Array.isArray(userData.notifications)) {
-      notifications = userData.notifications;
-    }
-  }
+  const notifications = userData?.notifications || [];
   const activeNotifications = notifications.filter((n: any) => !n.dismissed);
   const hasUnread = activeNotifications.length > 0; 
 
@@ -100,21 +85,7 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   const handleDismissAll = async () => {
     if (!userData || !userData.notifications) return;
     try {
-      // Parse notifications if it's a string
-      let notifArray: any[] = [];
-      if (typeof userData.notifications === 'string') {
-        try {
-          notifArray = JSON.parse(userData.notifications);
-        } catch (e) {
-          console.warn('Failed to parse notifications string:', e);
-          return;
-        }
-      } else if (Array.isArray(userData.notifications)) {
-        notifArray = userData.notifications;
-      } else {
-        return;
-      }
-      const updatedNotifs = notifArray.map(n => ({ ...n, dismissed: true }));
+      const updatedNotifs = userData.notifications.map(n => ({ ...n, dismissed: true }));
       
       // Update both MySQL and Firestore to ensure perfect sync
       await Promise.all([
@@ -149,9 +120,7 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
                   : (org?.sector === 'Government'
                     ? 'museum'
                     : 'commercial'));
-              // Use organization branding config if available, otherwise fall back to org data
-              const branding = org?.id ? getOrganizationBranding(org.id) : null;
-              const logoSrc = branding?.logoIconUrl || org?.logo || org?.logoUrl || getLocalIcon(defaultIcon);
+              const logoSrc = org?.logo || org?.logoUrl || getLocalIcon(defaultIcon);
               return (
                 <img src={logoSrc} alt="Org Logo" className="w-full h-full object-contain p-0.5 bg-slate-50" referrerPolicy="no-referrer" />
               );

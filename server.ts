@@ -288,7 +288,7 @@ async function start() {
         } catch (recoverErr: any) {
           console.warn("[Start-Up Recovery] Exception occurred during driver repair:", recoverErr.message);
         }
-      }, 1000); // Defer by 1 second to not block startup
+      })();
     }
   } catch (authInitErr: any) {
     console.error("Critical: Failed to safely initialize auth reference:", authInitErr.message);
@@ -1003,14 +1003,6 @@ async function start() {
     }
 
     const token = authHeader.split("Bearer ")[1];
-    
-    // Add timeout to prevent hanging requests
-    const timeoutId = setTimeout(() => {
-      if (!res.headersSent) {
-        res.status(408).json({ success: false, error: "Request timeout. Please try again." });
-      }
-    }, 8000); // 8 second timeout
-    
     try {
       const decodedToken = await verifyTokenResilient(token);
       const isSuperAdminByEmail = decodedToken.email?.toLowerCase() === "ravikumarpendyala9182@gmail.com";
@@ -1102,10 +1094,8 @@ async function start() {
         }
       }
 
-      clearTimeout(timeoutId);
       return res.json({ success: true, userData: { ...userRow, id: userRow.uid, forcePasswordChange } });
     } catch (error: any) {
-      clearTimeout(timeoutId);
       console.error("Token verification failed in verify-user api:", error);
       return res.status(401).json({ success: false, error: "Invalid token or session expired." });
     }
@@ -4971,45 +4961,6 @@ async function start() {
     }
   });
 
-  // Storage proxy for organization logos and assets
-  app.get('/api/storage/:filename', async (req, res) => {
-    const filename = req.params.filename;
-    
-    try {
-      // Get the storage presigned URL from Manus Forge API
-      const forgeUrl = process.env.BUILT_IN_FORGE_API_URL || 'https://api.manus.im';
-      const forgeKey = process.env.BUILT_IN_FORGE_API_KEY;
-      
-      if (!forgeKey) {
-        console.warn('BUILT_IN_FORGE_API_KEY not configured');
-        return res.status(500).json({ error: 'Storage not configured' });
-      }
-      
-      // Call Manus storage API to get presigned URL
-      const storageResponse = await fetch(`${forgeUrl}/storage/presigned-url`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${forgeKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          key: filename,
-          expiresIn: 3600,
-        }),
-      });
-      
-      if (!storageResponse.ok) {
-        return res.status(404).json({ error: 'Asset not found' });
-      }
-      
-      const { url } = await storageResponse.json();
-      res.redirect(url);
-    } catch (error) {
-      console.error('Storage proxy error:', error);
-      res.status(500).json({ error: 'Failed to retrieve asset' });
-    }
-  });
-
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -5033,21 +4984,13 @@ async function start() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
+    app.get("*all", (req, res) => {
+      if (req.originalUrl.startsWith('/api')) {
+        return res.status(404).json({ error: "API route not found" });
+      }
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
-
-  // API 404 handler - must be after all specific API routes
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: "API route not found" });
-    }
-    next();
-  });
-
-  // Catch-all route for SPA - must be LAST after all API routes
-  app.use((req, res) => {
-    const distPath = path.join(process.cwd(), "dist");
-    res.sendFile(path.join(distPath, "index.html"));
-  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`>>> SERVER READY ON PORT ${PORT} <<<`);

@@ -7,7 +7,6 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
 import { getLocalIcon } from '../lib/utils';
 import { getBackendUrl, setBackendUrl } from '../lib/apiPatch';
-import { OrganizationLogo } from '../components/OrganizationLogo';
 
 export default function Login() {
   const { login, loginEmail } = useAuth();
@@ -218,13 +217,20 @@ export default function Login() {
 
       <div className="max-w-md w-full bg-white rounded-[2.25rem] shadow-xl overflow-hidden border border-slate-100/85 z-10 relative">
         <div className="p-6 pb-2 text-center">
-            <div className="w-24 h-16 flex items-center justify-center mx-auto mb-4 transition-all duration-300">
-              <img 
-                src="/expertaid-logo.jpg" 
-                alt="ExpertAid Logo"
-                className="object-contain h-full w-full" 
-              />
-            </div>
+            {currentLogoUrl ? (
+              <div className="w-16 h-16 bg-white border border-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg p-2.5 transition-all duration-300">
+                <img 
+                  src={currentLogoUrl} 
+                  alt={currentName} 
+                  className="w-full h-full object-contain" 
+                  referrerPolicy="no-referrer" 
+                />
+              </div>
+            ) : (
+              <div className="w-14 h-14 bg-blue-500 rounded-[1.25rem] flex items-center justify-center mx-auto mb-3 shadow-xl shadow-blue-500/20">
+                <Bus className="w-7 h-7 text-white" />
+              </div>
+            )}
             <h1 className="text-xl sm:text-2xl font-black tracking-tight mb-0.5 text-slate-900 transition-all duration-300">{currentName}</h1>
             <p className="text-slate-400 font-bold text-[8px] sm:text-[10px] uppercase tracking-[0.25em] transition-all duration-300">{currentSector}</p>
         </div>
