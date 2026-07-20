@@ -5,9 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Expert GPS Tracking',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
-    hostname: 'expertgpstracking.app',
-    allowNavigation: ['expertgpstracking.app', '*.expertgpstracking.app']
+    androidScheme: 'https'
   },
   android: {
     allowMixedContent: true
