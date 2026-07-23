@@ -1,0 +1,11 @@
+{
+	"appId": "com.expertgpstracking.app",
+	"appName": "Expert GPS Tracking",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	},
+	"android": {
+		"allowMixedContent": true
+	}
+}
