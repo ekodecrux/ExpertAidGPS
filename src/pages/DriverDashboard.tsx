@@ -879,49 +879,8 @@ export default function DriverDashboard({
           console.warn("[StartTrip] background writes failed:", err);
         });
 
-        // Start geolocation tracking
-        if ("geolocation" in navigator) {
-          let fallbackMode = false;
-          const startTracking = (useHighAccuracy: boolean): any => {
-            return navigator.geolocation.watchPosition(
-              async (position) => {
-                const { latitude, longitude } = position.coords;
-                if (isValidCoordinate(latitude, longitude)) {
-                  // Update Firestore for real-time maps
-                  updateDoc(doc(db, "vehicles", vehicle.id), {
-                    location: { lat: latitude, lng: longitude },
-                    updatedAt: new Date().toISOString(),
-                  }).catch((e) =>
-                    console.warn("Vehicle tracking Firestore update error:", e),
-                  );
-
-                  // Update MySQL
-                  saveMySQLRecord("update", "vehicles", vehicle.id, {
-                    latitude: latitude,
-                    longitude: longitude,
-                    location: { lat: latitude, lng: longitude },
-                    updatedAt: new Date().toISOString(),
-                  }).catch((err) =>
-                    console.warn(
-                      "Failed to update vehicle coords in MySQL:",
-                      err,
-                    ),
-                  );
-                }
-              },
-              async (error) => {
-                // Silent - don't show error to user
-                console.log(`Geolocation error (highAccuracy=${useHighAccuracy}):`, error.code);
-              },
-              {
-                enableHighAccuracy: useHighAccuracy,
-                maximumAge: useHighAccuracy ? 10000 : 30000,
-                timeout: 30000,
-              },
-            );
-          };
-          watchId.current = startTracking(true);
-        }
+        // Geolocation tracking is handled by DriverApp component
+        // Removed from here to prevent duplicate tracking and errors
       }
     } catch (error) {
       console.error("Error toggling trip status:", error);
