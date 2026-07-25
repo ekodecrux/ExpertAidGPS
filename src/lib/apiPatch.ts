@@ -6,28 +6,43 @@ export function isNativeApp(): boolean {
   if (saved) return true;
 
   const currentOrigin = window.location.origin || '';
+  const href = window.location.href || '';
   
   const isCapacitor = 
-    (window as any).Capacitor || 
+    !!(window as any).Capacitor || 
     navigator.userAgent.toLowerCase().includes('capacitor') || 
     currentOrigin.startsWith('capacitor://') ||
-    (currentOrigin.includes('localhost') && !window.location.port);
+    href.startsWith('capacitor://') ||
+    currentOrigin.startsWith('file://') ||
+    href.startsWith('file://') ||
+    (currentOrigin.includes('localhost') && window.location.port !== '3000' && window.location.port !== '5173');
 
-  return !!isCapacitor;
+  return isCapacitor;
 }
 
 export function getBackendUrl(): string {
+  const PUBLIC_URL = 'https://ais-pre-7c6n22vhnzwfmwmjrx32gk-800611876025.asia-east1.run.app';
   const saved = localStorage.getItem('API_BASE_URL');
-  if (saved) {
-    return saved.trim().replace(/\/$/, '');
+
+  if (saved && saved.trim()) {
+    const cleanSaved = saved.trim().replace(/\/$/, '');
+    // Auto-migrate old dev URLs (ais-dev) to public preview URL (ais-pre) which doesn't require Google dev login cookies
+    if (cleanSaved.includes('ais-dev-')) {
+      localStorage.setItem('API_BASE_URL', PUBLIC_URL);
+      return PUBLIC_URL;
+    }
+    return cleanSaved;
   }
 
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL.trim().replace(/\/$/, '');
+  if ((import.meta as any).env?.VITE_API_BASE_URL) {
+    const envUrl = ((import.meta as any).env.VITE_API_BASE_URL as string).trim().replace(/\/$/, '');
+    if (envUrl.includes('ais-dev-')) {
+      return PUBLIC_URL;
+    }
+    return envUrl;
   }
 
-  // Default to the active Cloud Run server URL so the mobile APK connects seamlessly out-of-the-box
-  return 'https://ais-dev-7c6n22vhnzwfmwmjrx32gk-800611876025.asia-east1.run.app';
+  return PUBLIC_URL;
 }
 
 export function setBackendUrl(url: string) {
@@ -44,36 +59,67 @@ export function setBackendUrl(url: string) {
 
 // Monkey-patch window.fetch using Object.defineProperty to bypass read-only getter restrictions
 const originalFetch = window.fetch;
+
 Object.defineProperty(window, 'fetch', {
   value: function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    if (!isNativeApp()) {
-      // In normal browser environments (development & shared preview iframe), pass through directly
-      // This prevents CORS and Request cloning errors and ensures original fetch behavior
-      return originalFetch(input, init);
-    }
-
-    let url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url);
-
-    if (url.startsWith('/api/')) {
-      const base = getBackendUrl();
-      const cleanPath = url.startsWith('/') ? url : '/' + url;
-      url = `${base}${cleanPath}`;
-    }
+    let urlStr = '';
 
     if (typeof input === 'string') {
-      return originalFetch(url, init);
+      urlStr = input;
     } else if (input instanceof URL) {
-      return originalFetch(new URL(url), init);
+      urlStr = input.toString();
+    } else if (input && typeof (input as any).url === 'string') {
+      urlStr = (input as any).url;
+    }
+
+    let isApiCall = false;
+    let apiPath = '';
+
+    if (urlStr.startsWith('/api/')) {
+      isApiCall = true;
+      apiPath = urlStr;
+    } else if (urlStr.startsWith('api/')) {
+      isApiCall = true;
+      apiPath = '/' + urlStr;
     } else {
-      // If input is a Request object, clone it with the updated URL
       try {
-        const newRequest = new Request(url, input as Request);
-        return originalFetch(newRequest, init);
+        const parsed = new URL(urlStr, window.location.origin || 'https://localhost');
+        if (parsed.pathname.startsWith('/api/')) {
+          if (
+            isNativeApp() || 
+            parsed.hostname === 'localhost' || 
+            parsed.hostname === '127.0.0.1' || 
+            parsed.protocol === 'capacitor:' || 
+            parsed.protocol === 'file:'
+          ) {
+            isApiCall = true;
+            apiPath = parsed.pathname + parsed.search;
+          }
+        }
       } catch (e) {
-        // Fallback
-        return originalFetch(url, init);
+        // Ignore parsing errors
       }
     }
+
+    if (isApiCall && (isNativeApp() || !window.location.origin.includes('run.app'))) {
+      const baseUrl = getBackendUrl();
+      const targetUrl = `${baseUrl}${apiPath}`;
+
+      if (typeof input === 'string') {
+        return originalFetch(targetUrl, init);
+      } else if (input instanceof URL) {
+        return originalFetch(new URL(targetUrl), init);
+      } else {
+        try {
+          const newReq = new Request(targetUrl, input as Request);
+          return originalFetch(newReq, init);
+        } catch (e) {
+          return originalFetch(targetUrl, init);
+        }
+      }
+    }
+
+    return originalFetch(input, init);
   },
   writable: true,
   configurable: true,

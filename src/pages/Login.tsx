@@ -360,7 +360,7 @@ export default function Login() {
                       type="url"
                       value={serverUrlInput}
                       onChange={(e) => setServerUrlInput(e.target.value)}
-                      placeholder="https://ais-dev-7c6n22vhnzwfmwmjrx32gk-800611876025.asia-east1.run.app"
+                      placeholder="https://ais-pre-7c6n22vhnzwfmwmjrx32gk-800611876025.asia-east1.run.app"
                       className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/30 text-slate-800"
                     />
                   </div>
