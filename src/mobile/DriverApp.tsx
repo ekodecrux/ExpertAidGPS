@@ -378,30 +378,7 @@ export default function DriverApp() {
   );
 
   const renderContent = () => {
-    if (driverDataLoading && !driverData) {
-      return (
-        <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600 font-bold text-sm">Loading driver data...</p>
-        </div>
-      );
-    }
-    
-    if (driverDataError && !driverData) {
-      return (
-        <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-            <AlertCircle size={32} className="text-red-600" />
-          </div>
-          <h2 className="text-lg font-black text-slate-900 text-center">Unable to Load Driver App</h2>
-          <p className="text-sm text-slate-600 text-center">{driverDataError}</p>
-          <button onClick={() => window.location.reload()} className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm">
-            Retry
-          </button>
-        </div>
-      );
-    }
-    
+    // Render immediately - don't wait for data
     switch (activeTab) {
       case 'home':
         return (
