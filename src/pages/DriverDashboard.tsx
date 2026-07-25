@@ -910,17 +910,8 @@ export default function DriverDashboard({
                 }
               },
               async (error) => {
-                console.warn(
-                  `Geolocation error (highAccuracy=${useHighAccuracy}):`,
-                  error.message,
-                );
-                if (useHighAccuracy && !fallbackMode) {
-                  fallbackMode = true;
-                  if (watchId.current) {
-                    navigator.geolocation.clearWatch(watchId.current);
-                  }
-                  watchId.current = startTracking(false);
-                }
+                // Silent - don't show error to user
+                console.log(`Geolocation error (highAccuracy=${useHighAccuracy}):`, error.code);
               },
               {
                 enableHighAccuracy: useHighAccuracy,
