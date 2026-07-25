@@ -279,6 +279,15 @@ export default function UserApp() {
   ];
 
   const renderContent = () => {
+    if (userDbDataLoading && !userDbData) {
+      return (
+        <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600 font-bold text-sm">Loading your data...</p>
+        </div>
+      );
+    }
+    
     if (userDbDataError && !userDbData) {
       return (
         <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">

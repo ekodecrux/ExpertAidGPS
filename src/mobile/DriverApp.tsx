@@ -391,6 +391,15 @@ export default function DriverApp() {
   );
 
   const renderContent = () => {
+    if (driverDataLoading && !driverData) {
+      return (
+        <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600 font-bold text-sm">Loading driver data...</p>
+        </div>
+      );
+    }
+    
     if (driverDataError && !driverData) {
       return (
         <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">
