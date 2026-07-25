@@ -290,7 +290,10 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3 pb-8 flex justify-between items-center z-[5000] shadow-[0_-8px_30px_rgba(0,0,0,0.06)]">
+      <nav className={cn(
+        "bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3 flex justify-between items-center z-[5000] shadow-[0_-8px_30px_rgba(0,0,0,0.06)]",
+        (activeTab === 'map' || activeTab === 'track') ? "pb-3" : "pb-8"
+      )}>
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
