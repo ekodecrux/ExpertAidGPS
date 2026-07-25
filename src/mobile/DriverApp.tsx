@@ -169,7 +169,12 @@ export default function DriverApp() {
         console.log('[DriverApp] Starting geolocation tracking...');
         if (!isMounted) return;
 
-      const startTracking = (useHighAccuracy: boolean): string | null => {
+        // Request permission first (this will trigger Android system dialog)
+        console.log('[DriverApp] Requesting location permission...');
+        await requestLocationPermission();
+        console.log('[DriverApp] Permission request completed');
+
+        const startTracking = (useHighAccuracy: boolean): string | null => {
         return watchPosition(
           (latitude, longitude) => {
             if (isValidCoordinate(latitude, longitude)) {
