@@ -162,14 +162,24 @@ export default function DriverApp() {
 
     let localWatchId: string | null = null;
     let fallbackMode = false;
+    let isMounted = true;
 
     const initializeTracking = async () => {
-      // Request location permission first
-      const hasPermission = await requestLocationPermission();
-      if (!hasPermission) {
-        toast.error("Location permission denied. Please enable GPS in settings.", { id: 'gps-driver-error' });
-        return;
-      }
+      try {
+        // Request location permission with timeout to prevent hanging
+        console.log('[DriverApp] Requesting location permission...');
+        const permissionPromise = requestLocationPermission();
+        const timeoutPromise = new Promise<boolean>((resolve) => {
+          setTimeout(() => {
+            console.warn('[DriverApp] Permission request timeout, proceeding without explicit permission');
+            resolve(true);
+          }, 3000);
+        });
+        
+        const hasPermission = await Promise.race([permissionPromise, timeoutPromise]);
+        console.log('[DriverApp] Permission result:', hasPermission);
+        
+        if (!isMounted) return;
 
       const startTracking = (useHighAccuracy: boolean): string | null => {
         return watchPosition(
@@ -206,12 +216,20 @@ export default function DriverApp() {
         );
       };
 
-      localWatchId = startTracking(true);
+        localWatchId = startTracking(true);
+      } catch (err) {
+        console.error('[DriverApp] Error initializing geolocation:', err);
+        if (isMounted) {
+          toast.error('Failed to initialize GPS tracking', { id: 'gps-driver-error' });
+        }
+      }
     };
 
+    // Start initialization in background without blocking
     initializeTracking();
 
     return () => {
+      isMounted = false;
       if (localWatchId !== null) {
         clearWatch(localWatchId);
       }
