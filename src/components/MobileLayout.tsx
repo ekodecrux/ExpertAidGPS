@@ -281,8 +281,8 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className={cn(
-            "p-4 transition-all duration-300",
-            (activeTab === 'map' || activeTab === 'track') ? "h-full relative" : "min-h-full pb-24"
+            "transition-all duration-300",
+            (activeTab === 'map' || activeTab === 'track') ? "h-full relative p-0" : "p-4 min-h-full pb-24"
           )}
         >
           {children}
