@@ -21,7 +21,7 @@ export function isNativeApp(): boolean {
 }
 
 export function getBackendUrl(): string {
-  const PUBLIC_URL = 'https://ais-pre-7c6n22vhnzwfmwmjrx32gk-800611876025.asia-east1.run.app';
+  const PUBLIC_URL = 'https://4000-i8n8af5d3nemhmlh8lv70-48428903.sg1.manus.computer';
   const saved = localStorage.getItem('API_BASE_URL');
 
   if (saved && saved.trim()) {
