@@ -166,19 +166,7 @@ export default function DriverApp() {
 
     const initializeTracking = async () => {
       try {
-        // Request location permission with timeout to prevent hanging
-        console.log('[DriverApp] Requesting location permission...');
-        const permissionPromise = requestLocationPermission();
-        const timeoutPromise = new Promise<boolean>((resolve) => {
-          setTimeout(() => {
-            console.warn('[DriverApp] Permission request timeout, proceeding without explicit permission');
-            resolve(true);
-          }, 3000);
-        });
-        
-        const hasPermission = await Promise.race([permissionPromise, timeoutPromise]);
-        console.log('[DriverApp] Permission result:', hasPermission);
-        
+        console.log('[DriverApp] Starting geolocation tracking...');
         if (!isMounted) return;
 
       const startTracking = (useHighAccuracy: boolean): string | null => {
