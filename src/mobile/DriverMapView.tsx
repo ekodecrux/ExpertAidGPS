@@ -1127,7 +1127,7 @@ export default function DriverMapView({
     : (currentTargetStop ? { lat: currentTargetStop.lat, lng: currentTargetStop.lng } : null);
 
   return (
-    <div className="absolute inset-0 -m-4 flex flex-col overflow-hidden bg-slate-100">
+    <div className="absolute inset-0 -m-4 flex flex-col overflow-hidden bg-slate-100 h-screen w-screen">
       {/* 1. Precise Stats Overlay */}
       <div className="absolute top-4 left-4 right-4 z-[1000]">
         <header className="px-4 py-3 bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/50 flex items-center justify-between gap-3">
@@ -1200,7 +1200,7 @@ export default function DriverMapView({
       </div>
 
       {/* 2. Map Feed */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative w-full h-full overflow-hidden">
         <MapComponent 
           height="100%" 
           zoom={15} 

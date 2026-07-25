@@ -164,65 +164,47 @@ export default function DriverApp() {
     let fallbackMode = false;
     let isMounted = true;
 
-    const initializeTracking = async () => {
-      try {
-        console.log('[DriverApp] Starting geolocation tracking...');
-        if (!isMounted) return;
-
-        // Request permission first (this will trigger Android system dialog)
-        console.log('[DriverApp] Requesting location permission...');
-        await requestLocationPermission();
-        console.log('[DriverApp] Permission request completed');
-
-        const startTracking = (useHighAccuracy: boolean): string | null => {
+    // Start geolocation with 2 second delay - let app render first
+    const timeoutId = setTimeout(() => {
+      if (!isMounted) return;
+      
+      const startTracking = (useHighAccuracy: boolean): string | null => {
         return watchPosition(
           (latitude, longitude) => {
             if (isValidCoordinate(latitude, longitude)) {
-              // Update the vehicle's location inside Firestore for real-time sync with children / map
               updateDoc(doc(db, 'vehicles', trackingVehicleId), {
                 location: { lat: latitude, lng: longitude },
                 updatedAt: new Date().toISOString()
-              }).catch(e => console.warn('Vehicle tracking Firestore updateDoc error:', e));
+              }).catch(e => console.warn('Vehicle tracking error:', e));
 
-              // Update the vehicle's location inside MySQL
               saveMySQLRecord('update', 'vehicles', trackingVehicleId, {
                 latitude: latitude,
                 longitude: longitude,
                 location: { lat: latitude, lng: longitude },
                 updatedAt: new Date().toISOString()
-              }).catch(e => console.warn('Vehicle tracking saveMySQLRecord error:', e));
+              }).catch(e => console.warn('Vehicle tracking error:', e));
             }
           },
           (err) => {
-            console.warn(`Geolocation tracking (highAccuracy=${useHighAccuracy}):`, err);
+            console.warn(`Geolocation error (highAccuracy=${useHighAccuracy}):`, err);
             if (useHighAccuracy && !fallbackMode) {
               fallbackMode = true;
               if (localWatchId !== null) {
                 clearWatch(localWatchId);
               }
               localWatchId = startTracking(false);
-            } else {
-              toast.error("GPS location tracking failed. Please ensure GPS is enabled.", { id: 'gps-driver-error' });
             }
           },
           { enableHighAccuracy: useHighAccuracy }
         );
       };
 
-        localWatchId = startTracking(true);
-      } catch (err) {
-        console.error('[DriverApp] Error initializing geolocation:', err);
-        if (isMounted) {
-          toast.error('Failed to initialize GPS tracking', { id: 'gps-driver-error' });
-        }
-      }
-    };
-
-    // Start initialization in background without blocking
-    initializeTracking();
+      localWatchId = startTracking(true);
+    }, 2000);
 
     return () => {
       isMounted = false;
+      clearTimeout(timeoutId);
       if (localWatchId !== null) {
         clearWatch(localWatchId);
       }
