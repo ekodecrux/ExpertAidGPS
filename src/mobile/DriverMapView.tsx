@@ -1127,7 +1127,7 @@ export default function DriverMapView({
     : (currentTargetStop ? { lat: currentTargetStop.lat, lng: currentTargetStop.lng } : null);
 
   return (
-    <div className="absolute inset-0 -m-4 flex flex-col overflow-hidden bg-slate-100 h-screen w-screen">
+    <div className="absolute inset-0 flex flex-col overflow-hidden bg-slate-100 h-full w-full">
       {/* 1. Precise Stats Overlay */}
       <div className="absolute top-4 left-4 right-4 z-[1000]">
         <header className="px-4 py-3 bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/50 flex items-center justify-between gap-3">
@@ -1419,8 +1419,6 @@ export default function DriverMapView({
                                        mapRef.current.flyTo([lat, lng], 16);
                                        setSelectedStopId(null);
                                        toast.success(`Navigating map to ${selectedStopId === 'ORG' ? 'Hub' : (stop?.name || 'stop')}`);
-                                     } else {
-                                       toast.error("Location coordinate is invalid");
                                      }
                                    }}
                                    className="w-10 h-10 bg-blue-50 text-blue-600 border border-blue-100 rounded-full flex items-center justify-center transition-all hover:bg-blue-100 active:scale-90 shrink-0 cursor-pointer"
