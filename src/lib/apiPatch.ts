@@ -5,12 +5,13 @@ export function isNativeApp(): boolean {
   const saved = localStorage.getItem('API_BASE_URL');
   if (saved) return true;
 
-  const currentOrigin = window.location.origin;
+  const currentOrigin = window.location.origin || '';
   
   const isCapacitor = 
     (window as any).Capacitor || 
     navigator.userAgent.toLowerCase().includes('capacitor') || 
-    currentOrigin.startsWith('capacitor://');
+    currentOrigin.startsWith('capacitor://') ||
+    (currentOrigin.includes('localhost') && !window.location.port);
 
   return !!isCapacitor;
 }
@@ -21,8 +22,12 @@ export function getBackendUrl(): string {
     return saved.trim().replace(/\/$/, '');
   }
 
-  // Default to the user's production server for public release
-  return 'https://gpstracking.expertaid.in';
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL.trim().replace(/\/$/, '');
+  }
+
+  // Default to the active Cloud Run server URL so the mobile APK connects seamlessly out-of-the-box
+  return 'https://ais-dev-7c6n22vhnzwfmwmjrx32gk-800611876025.asia-east1.run.app';
 }
 
 export function setBackendUrl(url: string) {
@@ -31,9 +36,9 @@ export function setBackendUrl(url: string) {
   } else {
     let cleanUrl = url.trim();
     if (!/^https?:\/\//i.test(cleanUrl)) {
-      cleanUrl = 'http://' + cleanUrl;
+      cleanUrl = 'https://' + cleanUrl;
     }
-    localStorage.setItem('API_BASE_URL', cleanUrl);
+    localStorage.setItem('API_BASE_URL', cleanUrl.replace(/\/$/, ''));
   }
 }
 

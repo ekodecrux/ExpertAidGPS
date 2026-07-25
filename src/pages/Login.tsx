@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bus, MapPin, Truck, UserCheck, Mail, Lock, LogIn, AlertCircle, Eye, EyeOff, X } from 'lucide-react';
+import { Bus, MapPin, Truck, UserCheck, Mail, Lock, LogIn, AlertCircle, Eye, EyeOff, X, Globe, Server, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth as firebaseAuth } from '../lib/firebase';
@@ -291,8 +291,120 @@ export default function Login() {
               {isSubmitting ? 'Authenticating...' : 'Commence Session'}
             </button>
           </form>
+
+          {/* Server Config Quick Toggle */}
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px]">
+            <span className="text-slate-400 font-medium truncate max-w-[200px]" title={getBackendUrl()}>
+              Server: <strong className="text-slate-600 font-semibold">{getBackendUrl().replace(/^https?:\/\//, '')}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setServerUrlInput(getBackendUrl());
+                setShowServerConfig(true);
+              }}
+              className="text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <Globe className="w-3 h-3" /> Change Server
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Server Config Modal */}
+      <AnimatePresence>
+        {showServerConfig && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowServerConfig(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden z-10"
+            >
+              <div className="px-6 pt-6 pb-4 flex items-center justify-between border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                    <Server className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-tight">API Server Settings</h2>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Mobile Backend Endpoint</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowServerConfig(false)}
+                  className="w-8 h-8 rounded-full hover:bg-slate-50 flex items-center justify-center text-slate-400"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Specify the API server domain or Cloud Run backend URL where your mobile app communicates:
+                </p>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tight pl-1">Server URL</label>
+                  <div className="relative">
+                    <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="url"
+                      value={serverUrlInput}
+                      onChange={(e) => setServerUrlInput(e.target.value)}
+                      placeholder="https://ais-dev-7c6n22vhnzwfmwmjrx32gk-800611876025.asia-east1.run.app"
+                      className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/30 text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const testUrl = serverUrlInput.trim().replace(/\/$/, '') + '/api/health';
+                      toast.loading('Testing connection...', { id: 'test-conn' });
+                      try {
+                        const res = await fetch(testUrl);
+                        if (res.ok) {
+                          toast.success('Server Connection Successful!', { id: 'test-conn' });
+                        } else {
+                          toast.error(`Server responded with code ${res.status}`, { id: 'test-conn' });
+                        }
+                      } catch (err: any) {
+                        toast.error(`Connection Failed: ${err.message || 'Network Error'}`, { id: 'test-conn' });
+                      }
+                    }}
+                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                  >
+                    Test Link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBackendUrl(serverUrlInput);
+                      toast.success('Server URL updated successfully!');
+                      setShowServerConfig(false);
+                      window.location.reload();
+                    }}
+                    className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                  >
+                    Save & Restart
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Reset Security Code Modal */}
       <AnimatePresence>
