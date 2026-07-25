@@ -3,7 +3,7 @@ import MobileLayout from '../components/MobileLayout';
 import DriverDashboard from '../pages/DriverDashboard';
 import DriverRoutesView from './DriverRoutesView';
 import DriverMapView from './DriverMapView';
-import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight } from 'lucide-react';
+import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, auth, auth as firebaseAuth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -42,6 +42,7 @@ export default function DriverApp() {
     _setActiveTrip(trip);
   };
   const [driverDataLoading, setDriverDataLoading] = useState<boolean>(!driverData);
+  const [driverDataError, setDriverDataError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -141,6 +142,7 @@ export default function DriverApp() {
           console.warn("Transient network connection to /api/records/user-data in DriverApp is resolving...");
         } else {
           console.error("Error fetching active trip in DriverApp:", err);
+          setDriverDataError(err?.message || 'Failed to load driver data');
         }
       }
     };
@@ -379,6 +381,21 @@ export default function DriverApp() {
   );
 
   const renderContent = () => {
+    if (driverDataError && !driverData) {
+      return (
+        <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+            <AlertCircle size={32} className="text-red-600" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900 text-center">Unable to Load Driver App</h2>
+          <p className="text-sm text-slate-600 text-center">{driverDataError}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm">
+            Retry
+          </button>
+        </div>
+      );
+    }
+    
     switch (activeTab) {
       case 'home':
         return (

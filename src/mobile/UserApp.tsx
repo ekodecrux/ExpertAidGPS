@@ -3,7 +3,7 @@ import MobileLayout from '../components/MobileLayout';
 import UserDashboard from '../pages/UserDashboard';
 import UserMapView from './UserMapView';
 import UserRoutesView from './UserRoutesView';
-import { Home, Compass, Bell, User, MapPin, Bus, Clock, Mail, Phone, Shield, Key, Camera, CheckCircle, ChevronRight, LogOut, Navigation, X, XCircle } from 'lucide-react';
+import { Home, Compass, Bell, User, MapPin, Bus, Clock, Mail, Phone, Shield, Key, Camera, CheckCircle, ChevronRight, LogOut, Navigation, X, XCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import { cn, getLocalAvatar, getUserAvatar, cleanMessage } from '../lib/utils';
@@ -29,6 +29,7 @@ export default function UserApp() {
     }
   });
   const [userDbDataLoading, setUserDbDataLoading] = useState<boolean>(!userDbData);
+  const [userDbDataError, setUserDbDataError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userData) return;
@@ -83,8 +84,10 @@ export default function UserApp() {
             }
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn("UserApp MySQL poll failed, falling back to cache/Firestore:", err);
+        const errMsg = err?.message || String(err);
+        if (isMounted) setUserDbDataError(errMsg);
         try {
           if (userData.orgId) {
             const orgDoc = await getDoc(doc(db, 'organizations', userData.orgId));
@@ -100,8 +103,10 @@ export default function UserApp() {
               }
             }
           }
-        } catch (fErr) {
+          if (isMounted) setUserDbDataError(null);
+        } catch (fErr: any) {
           console.error("Firestore fallback failed too:", fErr);
+          if (isMounted) setUserDbDataError(fErr?.message || 'Failed to load data');
         }
       } finally {
         if (isMounted) {
@@ -274,6 +279,21 @@ export default function UserApp() {
   ];
 
   const renderContent = () => {
+    if (userDbDataError && !userDbData) {
+      return (
+        <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+            <AlertCircle size={32} className="text-red-600" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900 text-center">Unable to Load App</h2>
+          <p className="text-sm text-slate-600 text-center">{userDbDataError}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm">
+            Retry
+          </button>
+        </div>
+      );
+    }
+    
     switch (activeTab) {
       case 'home':
         return <UserDashboard userDbData={userDbData} userDbDataLoading={userDbDataLoading} />;
