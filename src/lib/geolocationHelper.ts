@@ -1,5 +1,5 @@
-// Silent GPS tracking - no errors shown to user
-// Just logs to console, doesn't interrupt app
+// Silent GPS tracking - suppresses all errors
+// Just logs to console, never shows errors to user
 
 let watchId: number | null = null;
 
@@ -11,12 +11,16 @@ export function watchPosition(
   try {
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
-        onSuccess(latitude, longitude);
+        try {
+          const { latitude, longitude } = position.coords;
+          onSuccess(latitude, longitude);
+        } catch (e) {
+          console.log('[GPS] Success callback error:', e);
+        }
       },
       (error) => {
-        // Silent - just log, don't call onError
-        console.log('[GPS] Position error:', error.code);
+        // NEVER call onError - suppress completely
+        console.log('[GPS] Position error code:', error.code);
       },
       {
         enableHighAccuracy: options.enableHighAccuracy ?? true,
