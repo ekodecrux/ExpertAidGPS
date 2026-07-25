@@ -1,0 +1,10 @@
+# Explicitly declare text and binary files to prevent Git for Windows CRLF corruption
+*.jar binary
+*.png binary
+*.jpg binary
+*.jks binary
+*.keystore binary
+
+# Ensure shell scripts retain LF line endings
+*.sh text eol=lf
+gradlew text eol=lf
