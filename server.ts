@@ -5022,6 +5022,17 @@ async function start() {
     }
   });
 
+  // Serve privacy policy
+  app.get('/privacy-policy.html', (req, res) => {
+    const privacyPolicyPath = path.join(process.cwd(), 'client/public/privacy-policy.html');
+    if (fs.existsSync(privacyPolicyPath)) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.sendFile(privacyPolicyPath);
+    } else {
+      res.status(404).send('Privacy Policy not found');
+    }
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
