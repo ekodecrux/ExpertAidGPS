@@ -18,7 +18,7 @@ export function isNativeApp(): boolean {
   return isCapacitor;
 }
 
-export const DEFAULT_PRODUCTION_URL = 'https://ais-pre-7c6n22vhnzwfmwmjrx32gk-800611876025.asia-east1.run.app';
+export const DEFAULT_PRODUCTION_URL = 'https://login.expertaidlms.in';
 
 export function getBackendUrl(): string {
   if (typeof window !== 'undefined') {
