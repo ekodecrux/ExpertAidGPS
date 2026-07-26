@@ -239,11 +239,11 @@ export default function Login() {
 
       <div className="max-w-md w-full bg-white rounded-[2.25rem] shadow-xl overflow-hidden border border-slate-100/85 z-10 relative">
         <div className="p-6 pb-2 text-center">
-            <div className="w-16 h-16 bg-white border border-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg p-2.5 transition-all duration-300">
+            <div className="mx-auto mb-3 transition-all duration-300">
               <img 
                 src={expertAidLogoUrl} 
                 alt="ExpertAid" 
-                className="w-full h-full object-contain" 
+                className="h-20 mx-auto object-contain" 
                 referrerPolicy="no-referrer" 
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = 'none';
