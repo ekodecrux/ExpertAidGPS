@@ -1,31 +1,23 @@
-# Binary files MUST be kept binary to prevent Git for Windows / ZIP CRLF corruption
+# Global binary file handling
+*.png binary diff=exif
+*.jpg binary diff=exif
+*.jpeg binary diff=exif
+*.gif binary diff=exif
 *.jar binary
-*.aar binary
-*.png binary
-*.jpg binary
-*.jpeg binary
-*.webp binary
-*.gif binary
-*.ico binary
-*.jks binary
-*.keystore binary
-*.so binary
-*.flat binary
 *.zip binary
+*.apk binary
 
-# Ensure shell scripts & gradle wrapper retain LF line endings
-*.sh text eol=lf
-gradlew text eol=lf
-*.bat text eol=crlf
-*.cmd text eol=crlf
+# Disable CRLF conversion for all files
+* text=auto
+
+# Explicitly set line endings for text files
 *.gradle text eol=lf
-*.java text eol=lf
-*.kt text eol=lf
+*.properties text eol=lf
 *.xml text eol=lf
 *.json text eol=lf
+*.kt text eol=lf
+*.java text eol=lf
 *.ts text eol=lf
 *.tsx text eol=lf
 *.js text eol=lf
-*.css text eol=lf
-*.html text eol=lf
-
+*.jsx text eol=lf
