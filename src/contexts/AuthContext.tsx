@@ -284,14 +284,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let errorResult: any = { error: 'Authentication failed.' };
         try {
           const contentType = loginRes.headers.get('content-type');
+          const responseText = await loginRes.text();
+          console.log('[LOGIN] Error response (first 500 chars):', responseText.substring(0, 500));
+          console.log('[LOGIN] Content-Type:', contentType);
+          
           if (contentType && contentType.includes('application/json')) {
-            errorResult = await loginRes.json();
+            try {
+              errorResult = JSON.parse(responseText);
+            } catch (e) {
+              errorResult = { error: responseText };
+            }
           } else {
-            const text = await loginRes.text();
-            if (text.includes('<!doctype') || text.includes('<html')) {
+            if (responseText.includes('<!doctype') || responseText.includes('<html')) {
+              console.error('[LOGIN] Got HTML response - backend may be down');
               throw new Error('Backend server error: The backend API is not responding correctly. Please ensure the backend service is running.');
             }
-            errorResult = { error: text || 'Authentication failed.' };
+            errorResult = { error: responseText || 'Authentication failed.' };
           }
         } catch (parseErr: any) {
           if (parseErr.message.includes('Backend server')) {
