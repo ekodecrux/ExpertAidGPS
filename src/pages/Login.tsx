@@ -88,7 +88,7 @@ export default function Login() {
   const currentSector = currentOrg ? `${currentOrg.sector || 'Organization'} Portal` : "Fleet Intelligence Platform";
   
   // Use ExpertAid logo for login screen
-  const expertAidLogoUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Exp_logo.svg/1200px-Exp_logo.svg.png';
+  const expertAidLogoUrl = '/assets/expertaid-logo.png';
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -311,22 +311,7 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Server Config Quick Toggle */}
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px]">
-            <span className="text-slate-400 font-medium truncate max-w-[200px]" title={getBackendUrl()}>
-              Server: <strong className="text-slate-600 font-semibold">{getBackendUrl().replace(/^https?:\/\//, '')}</strong>
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setServerUrlInput(getBackendUrl());
-                setShowServerConfig(true);
-              }}
-              className="text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 cursor-pointer"
-            >
-              <Globe className="w-3 h-3" /> Change Server
-            </button>
-          </div>
+          {/* Server Config Hidden from Users */}
         </div>
       </div>
 
