@@ -271,11 +271,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!loginRes.ok) {
-        const errorResult = await loginRes.json().catch(() => ({ error: 'Authentication failed.' }));
+        let errorResult: any = { error: 'Authentication failed.' };
+        try {
+          const contentType = loginRes.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            errorResult = await loginRes.json();
+          } else {
+            const text = await loginRes.text();
+            if (text.includes('<!doctype') || text.includes('<html')) {
+              throw new Error('Backend server error: The backend API is not responding correctly. Please ensure the backend service is running.');
+            }
+            errorResult = { error: text || 'Authentication failed.' };
+          }
+        } catch (parseErr: any) {
+          if (parseErr.message.includes('Backend server')) {
+            throw parseErr;
+          }
+          throw new Error('Invalid response from backend. Please check server connection.');
+        }
         throw new Error(errorResult.error || "Failed to authenticate.");
       }
 
-      const loginResult = await loginRes.json();
+      let loginResult: any;
+      try {
+        const contentType = loginRes.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          loginResult = await loginRes.json();
+        } else {
+          const text = await loginRes.text();
+          if (text.includes('<!doctype') || text.includes('<html')) {
+            throw new Error('Backend server error: The backend API is not responding correctly. Please ensure the backend service is running.');
+          }
+          throw new Error('Backend returned non-JSON response. Backend API may not be configured correctly.');
+        }
+      } catch (parseErr: any) {
+        throw new Error(parseErr.message || 'Failed to parse backend response.');
+      }
+      
       if (!loginResult.success) {
         throw new Error(loginResult.error || "Failed to authenticate.");
       }
