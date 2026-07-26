@@ -111,7 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!token) {
             token = await currentUser.getIdToken(true);
           }
-          const response = await fetch('/api/auth/verify-user', {
+          const backendUrl = getBackendUrl();
+          const response = await fetch(`${backendUrl}/api/auth/verify-user`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -219,7 +220,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await signInWithPopup(auth, provider);
       
       const token = await res.user.getIdToken(true);
-      const verifyRes = await fetch('/api/auth/verify-user', {
+      const backendUrl = getBackendUrl();
+      const verifyRes = await fetch(`${backendUrl}/api/auth/verify-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -262,7 +264,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let apiUserData: any = null;
 
       // Custom Express local authentication POST directly to MySQL
-      const loginRes = await fetch('/api/auth/login', {
+      const backendUrl = getBackendUrl();
+      const loginRes = await fetch(`${backendUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -366,7 +369,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    const res = await fetch("/api/auth/forgot-password", {
+    const backendUrl = getBackendUrl();
+    const res = await fetch(`${backendUrl}/api/auth/forgot-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -383,7 +387,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     try {
       const token = await user.getIdToken(true);
-      const response = await fetch('/api/auth/verify-user', {
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/api/auth/verify-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
