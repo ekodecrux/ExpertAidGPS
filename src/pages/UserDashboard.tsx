@@ -465,19 +465,25 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
       }
 
       // 4. Vehicle & location tracking resolution
-      const derivedVId = matchedTrip?.vehicleId || matchedRouteObj?.vehicleId || (userData as any)?.vehicleId || 'DEV-V1';
-      setTargetVehicleId(derivedVId);
+      if (res.vehicles && res.vehicles.length > 0) {
+        const assignedDriver = res.users?.find((u: any) => u.role === 'driver' && (u.routeId === routeId || u.uid === matchedTrip?.driverId));
+        const matchedVehicle = res.vehicles.find((v: any) => v && (
+          v.id === matchedTrip?.vehicleId ||
+          v.id === matchedRouteObj?.vehicleId ||
+          v.id === (userData as any)?.vehicleId ||
+          (assignedDriver && (v.driverId === assignedDriver.uid || v.id === assignedDriver.vehicleId)) ||
+          (matchedRouteObj && v.routeId === matchedRouteObj.id)
+        )) || res.vehicles[0];
 
-      if (derivedVId && res.vehicles) {
-        const matchedVehicle = res.vehicles.find((v: any) => v.id === derivedVId);
         if (matchedVehicle) {
+          setTargetVehicleId(matchedVehicle.id);
           const locObj = (matchedVehicle.latitude !== null && matchedVehicle.longitude !== null && matchedVehicle.latitude !== undefined && matchedVehicle.longitude !== undefined)
             ? { lat: Number(matchedVehicle.latitude), lng: Number(matchedVehicle.longitude) }
-            : (typeof matchedVehicle.location === 'string' ? (() => { try { return JSON.parse(matchedVehicle.location); } catch(e) { return null; } })() : matchedVehicle.location || null);
+            : (typeof matchedVehicle.location === 'string' ? (() => { try { return JSON.parse(matchedVehicle.location); } catch(e) { return null; } })() : matchedVehicle.location || org?.location || null);
           
           setVehicle({
             ...matchedVehicle,
-            plateNumber: matchedVehicle.plateNumber || matchedVehicle.number || "",
+            plateNumber: matchedVehicle.plateNumber || matchedVehicle.number || "BUS-01",
             location: locObj,
             isRealtime: true
           });

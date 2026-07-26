@@ -119,17 +119,24 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
       }
 
       // 7. Set Tracking Vehicle Coordinate
-      if (res.vehicles) {
-        const vehicleIdToFetch = matchedTrip?.vehicleId || matchedRoute?.vehicleId || uData.vehicleId || 'DEV-V1';
-        const matchedVehicle = res.vehicles.find((v: any) => v.id === vehicleIdToFetch);
+      if (res.vehicles && res.vehicles.length > 0) {
+        const matchedVehicle = res.vehicles.find((v: any) => v && (
+          v.id === matchedTrip?.vehicleId ||
+          v.id === matchedRoute?.vehicleId ||
+          v.id === uData?.vehicleId ||
+          v.id === driverVehicleId ||
+          (driver && v.driverId === driver.uid) ||
+          (matchedRoute && v.routeId === matchedRoute.id)
+        )) || res.vehicles[0];
+
         if (matchedVehicle) {
           const locObj = (matchedVehicle.latitude !== null && matchedVehicle.longitude !== null && matchedVehicle.latitude !== undefined && matchedVehicle.longitude !== undefined)
             ? { lat: Number(matchedVehicle.latitude), lng: Number(matchedVehicle.longitude) }
-            : (typeof matchedVehicle.location === 'string' ? (() => { try { return JSON.parse(matchedVehicle.location); } catch(e) { return null; } })() : matchedVehicle.location || null);
+            : (typeof matchedVehicle.location === 'string' ? (() => { try { return JSON.parse(matchedVehicle.location); } catch(e) { return null; } })() : matchedVehicle.location || org?.location || null);
 
           setVehicle({
             ...matchedVehicle,
-            plateNumber: matchedVehicle.plateNumber || matchedVehicle.number || "",
+            plateNumber: matchedVehicle.plateNumber || matchedVehicle.number || "BUS-01",
             location: locObj
           });
         }

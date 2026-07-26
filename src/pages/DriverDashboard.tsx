@@ -310,24 +310,34 @@ export default function DriverDashboard({
       }
 
       // Set Vehicle details
-      if (res.vehicles) {
-        const trackingVehicleId =
-          matchedTrip?.vehicleId ||
-          targetRoute?.vehicleId ||
-          userData?.vehicleId ||
-          "DEV-V1";
-        const matchedVehicle = res.vehicles.find(
-          (v: any) => v && v.id === trackingVehicleId,
-        );
+      if (res.vehicles && res.vehicles.length > 0) {
+        const currentDriverId = userData?.id || userData?.uid;
+        const matchedVehicle = res.vehicles.find((v: any) => v && (
+          v.id === matchedTrip?.vehicleId ||
+          v.id === targetRoute?.vehicleId ||
+          v.id === userData?.vehicleId ||
+          (currentDriverId && v.driverId === currentDriverId) ||
+          (targetRoute?.id && v.routeId === targetRoute.id)
+        )) || res.vehicles[0];
+
         if (matchedVehicle) {
-          setVehicle(matchedVehicle);
-        } else {
+          const locObj = (matchedVehicle.latitude !== null && matchedVehicle.longitude !== null && matchedVehicle.latitude !== undefined && matchedVehicle.longitude !== undefined)
+            ? { lat: Number(matchedVehicle.latitude), lng: Number(matchedVehicle.longitude) }
+            : (typeof matchedVehicle.location === 'string' ? (() => { try { return JSON.parse(matchedVehicle.location); } catch(e) { return null; } })() : matchedVehicle.location || org?.location || null);
+
           setVehicle({
-            id: trackingVehicleId,
-            plateNumber: "BUS-01",
-            status: "active",
+            ...matchedVehicle,
+            plateNumber: matchedVehicle.plateNumber || matchedVehicle.number || "BUS-01",
+            location: locObj
           });
         }
+      } else {
+        setVehicle({
+          id: "DEV-V1",
+          plateNumber: "BUS-01",
+          status: "active",
+          location: org?.location || null
+        });
       }
     };
 
@@ -895,11 +905,16 @@ export default function DriverDashboard({
         watchLocation(
           (latitude, longitude) => {
             if (isValidCoordinate(latitude, longitude)) {
+              const newLoc = { lat: latitude, lng: longitude };
+
+              // Update local state for instant live marker update
+              setVehicle((prev: any) => prev ? { ...prev, location: newLoc } : { id: vehicle.id, location: newLoc });
+
               // Update Firestore for real-time maps
-              updateDoc(doc(db, "vehicles", vehicle.id), {
-                location: { lat: latitude, lng: longitude },
+              setDoc(doc(db, "vehicles", vehicle.id), {
+                location: newLoc,
                 updatedAt: new Date().toISOString(),
-              }).catch((e) =>
+              }, { merge: true }).catch((e) =>
                 console.warn("Vehicle tracking Firestore update error:", e),
               );
 
@@ -907,7 +922,7 @@ export default function DriverDashboard({
               saveMySQLRecord("update", "vehicles", vehicle.id, {
                 latitude: latitude,
                 longitude: longitude,
-                location: { lat: latitude, lng: longitude },
+                location: newLoc,
                 updatedAt: new Date().toISOString(),
               }).catch((err) =>
                 console.warn(
@@ -915,6 +930,19 @@ export default function DriverDashboard({
                   err,
                 ),
               );
+
+              if (activeTrip?.id) {
+                saveMySQLRecord("update", "trips", activeTrip.id, {
+                  currentLat: latitude,
+                  currentLng: longitude,
+                  currentLocation: newLoc,
+                  updatedAt: new Date().toISOString()
+                }).catch(() => {});
+                setDoc(doc(db, "trips", activeTrip.id), {
+                  currentLocation: newLoc,
+                  updatedAt: new Date().toISOString()
+                }, { merge: true }).catch(() => {});
+              }
             }
           },
           (err) => {

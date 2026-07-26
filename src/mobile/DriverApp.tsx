@@ -6,7 +6,7 @@ import DriverMapView from './DriverMapView';
 import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, auth, auth as firebaseAuth } from '../lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { isValidCoordinate, cn, getLocalAvatar, getUserAvatar } from '../lib/utils';
 import { watchLocation } from '../lib/locationService';
@@ -132,7 +132,15 @@ export default function DriverApp() {
               const matchedRoute = res.routes?.find((r: any) => 
                 r && (r.id === userData.routeId || r.driverId === currentDriverId)
               );
-              const trackingVId = matchedTrip?.vehicleId || matchedRoute?.vehicleId || userData.vehicleId || 'DEV-V1';
+              const matchedVehicle = res.vehicles?.find((v: any) => v && (
+                v.id === matchedTrip?.vehicleId ||
+                v.id === matchedRoute?.vehicleId ||
+                v.id === userData.vehicleId ||
+                (currentDriverId && v.driverId === currentDriverId) ||
+                (matchedRoute?.id && v.routeId === matchedRoute.id)
+              )) || res.vehicles?.[0];
+
+              const trackingVId = matchedTrip?.vehicleId || matchedVehicle?.id || matchedRoute?.vehicleId || userData.vehicleId || 'DEV-V1';
               setAssignedVehicleId(trackingVId);
             }
           }
@@ -163,19 +171,34 @@ export default function DriverApp() {
     watchLocation(
       (latitude, longitude) => {
         if (isValidCoordinate(latitude, longitude)) {
+          const locObj = { lat: latitude, lng: longitude };
+
           // Update the vehicle's location inside Firestore for real-time sync with children / map
-          updateDoc(doc(db, 'vehicles', trackingVehicleId), {
-            location: { lat: latitude, lng: longitude },
+          setDoc(doc(db, 'vehicles', trackingVehicleId), {
+            location: locObj,
             updatedAt: new Date().toISOString()
-          }).catch(e => console.warn('Vehicle tracking Firestore updateDoc error:', e));
+          }, { merge: true }).catch(e => console.warn('Vehicle tracking Firestore setDoc error:', e));
 
           // Update the vehicle's location inside MySQL
           saveMySQLRecord('update', 'vehicles', trackingVehicleId, {
             latitude: latitude,
             longitude: longitude,
-            location: { lat: latitude, lng: longitude },
+            location: locObj,
             updatedAt: new Date().toISOString()
           }).catch(e => console.warn('Vehicle tracking saveMySQLRecord error:', e));
+
+          if (activeTrip?.id) {
+            saveMySQLRecord('update', 'trips', activeTrip.id, {
+              currentLat: latitude,
+              currentLng: longitude,
+              currentLocation: locObj,
+              updatedAt: new Date().toISOString()
+            }).catch(() => {});
+            setDoc(doc(db, 'trips', activeTrip.id), {
+              currentLocation: locObj,
+              updatedAt: new Date().toISOString()
+            }, { merge: true }).catch(() => {});
+          }
         }
       },
       (err) => {

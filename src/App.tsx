@@ -15,8 +15,6 @@ import UserApp from './mobile/UserApp';
 function AppContent() {
   const { userData, loading } = useAuth();
   
-  const isMobileRole = userData?.role === 'driver' || userData?.role === 'user';
-
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -36,53 +34,62 @@ function AppContent() {
     return <ForcePasswordChange />;
   }
 
-  // Use specialized Mobile App containers for Driver and User
-  if (userData.role === 'driver') return <DriverApp />;
-  if (userData.role === 'user') return <UserApp />;
+  const role = (userData.role || '').toLowerCase().trim();
 
-  return (
-    <AppShell>
-      <Routes>
-        {/* Core Dashboards based on role */}
-        <Route path="/" element={
-          <>
-            {userData.role === 'super_admin' && <SuperAdminDashboard view="overview" />}
-            {userData.role === 'org_admin' && <OrgAdminDashboard view="overview" />}
-          </>
-        } />
+  // 1. Driver App
+  if (role === 'driver') {
+    return <DriverApp />;
+  }
 
-        {/* Fleet Management Routes (Org Admin) */}
-        {userData.role === 'org_admin' && (
-          <>
-            <Route path="/vehicles" element={<OrgAdminDashboard view="vehicles" />} />
-            <Route path="/drivers" element={<OrgAdminDashboard view="drivers" />} />
-            <Route path="/routes" element={<OrgAdminDashboard view="routes" />} />
-            <Route path="/members" element={<OrgAdminDashboard view="members" />} />
-            <Route path="/reports" element={<OrgAdminDashboard view="reports" />} />
-            <Route path="/settings" element={<OrgAdminDashboard view="settings" />} />
-          </>
-        )}
+  // 2. Admin Dashboards
+  if (role === 'super_admin' || role === 'org_admin') {
+    return (
+      <AppShell>
+        <Routes>
+          {/* Core Dashboards based on role */}
+          <Route path="/" element={
+            <>
+              {role === 'super_admin' && <SuperAdminDashboard view="overview" />}
+              {role === 'org_admin' && <OrgAdminDashboard view="overview" />}
+            </>
+          } />
 
-        {/* Live Map Tracking (Both Super Admin and Org Admin) */}
-        {(userData.role === 'org_admin' || userData.role === 'super_admin') && (
-          <Route path="/map" element={<OrgAdminDashboard view="map" />} />
-        )}
+          {/* Fleet Management Routes (Org Admin) */}
+          {role === 'org_admin' && (
+            <>
+              <Route path="/vehicles" element={<OrgAdminDashboard view="vehicles" />} />
+              <Route path="/drivers" element={<OrgAdminDashboard view="drivers" />} />
+              <Route path="/routes" element={<OrgAdminDashboard view="routes" />} />
+              <Route path="/members" element={<OrgAdminDashboard view="members" />} />
+              <Route path="/reports" element={<OrgAdminDashboard view="reports" />} />
+              <Route path="/settings" element={<OrgAdminDashboard view="settings" />} />
+            </>
+          )}
 
-        {/* Super Admin Specific Routes */}
-        {userData.role === 'super_admin' && (
-          <>
-            <Route path="/clients" element={<SuperAdminDashboard view="clients" />} />
-            <Route path="/logs" element={<SuperAdminDashboard view="logs" />} />
-            <Route path="/reports" element={<SuperAdminDashboard view="reports" />} />
-            <Route path="/settings" element={<SuperAdminDashboard view="settings" />} />
-          </>
-        )}
+          {/* Live Map Tracking (Both Super Admin and Org Admin) */}
+          {(role === 'org_admin' || role === 'super_admin') && (
+            <Route path="/map" element={<OrgAdminDashboard view="map" />} />
+          )}
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AppShell>
-  );
+          {/* Super Admin Specific Routes */}
+          {role === 'super_admin' && (
+            <>
+              <Route path="/clients" element={<SuperAdminDashboard view="clients" />} />
+              <Route path="/logs" element={<SuperAdminDashboard view="logs" />} />
+              <Route path="/reports" element={<SuperAdminDashboard view="reports" />} />
+              <Route path="/settings" element={<SuperAdminDashboard view="settings" />} />
+            </>
+          )}
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppShell>
+    );
+  }
+
+  // 3. Fallback for all user/member/student/parent roles
+  return <UserApp />;
 }
 
 export default function App() {

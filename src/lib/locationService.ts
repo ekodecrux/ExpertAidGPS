@@ -4,25 +4,29 @@ import { isNativeApp } from './apiPatch';
 export async function requestLocationPermissions(): Promise<boolean> {
   try {
     if (isNativeApp()) {
-      const status: PermissionStatus = await Geolocation.checkPermissions();
-      if (status.location !== 'granted' && status.coarseLocation !== 'granted') {
-        const req = await Geolocation.requestPermissions();
-        return req.location === 'granted' || req.coarseLocation === 'granted';
-      }
-      return true;
-    } else {
-      if ('permissions' in navigator && navigator.permissions.query) {
-        try {
-          const res = await navigator.permissions.query({ name: 'geolocation' as any });
-          if (res.state === 'prompt' || res.state === 'granted') {
-            return true;
-          }
-        } catch (e) {
-          // ignore query error on unsupported browsers
+      try {
+        const status: PermissionStatus = await Geolocation.checkPermissions();
+        if (status.location !== 'granted' && status.coarseLocation !== 'granted') {
+          const req = await Geolocation.requestPermissions();
+          return req.location === 'granted' || req.coarseLocation === 'granted';
         }
+        return true;
+      } catch (e) {
+        console.warn('Capacitor checkPermissions error, falling back to navigator permissions:', e);
       }
-      return 'geolocation' in navigator;
     }
+
+    if ('permissions' in navigator && navigator.permissions.query) {
+      try {
+        const res = await navigator.permissions.query({ name: 'geolocation' as any });
+        if (res.state === 'prompt' || res.state === 'granted') {
+          return true;
+        }
+      } catch (e) {
+        // ignore query error on unsupported browsers
+      }
+    }
+    return 'geolocation' in navigator;
   } catch (err) {
     console.warn('Error checking/requesting location permissions:', err);
     return false;
@@ -30,22 +34,39 @@ export async function requestLocationPermissions(): Promise<boolean> {
 }
 
 export async function getCurrentPosition(): Promise<{ lat: number; lng: number } | null> {
-  try {
-    await requestLocationPermissions();
-    if (isNativeApp()) {
+  await requestLocationPermissions().catch(() => {});
+
+  if (isNativeApp()) {
+    // Tier 1: Capacitor High Accuracy
+    try {
       const pos = await Geolocation.getCurrentPosition({
         enableHighAccuracy: true,
-        timeout: 15000,
+        timeout: 10000,
         maximumAge: 5000
       });
       if (pos && pos.coords) {
         return { lat: pos.coords.latitude, lng: pos.coords.longitude };
       }
+    } catch (err) {
+      console.warn('Native high accuracy getCurrentPosition failed, trying low accuracy:', err);
     }
-  } catch (err) {
-    console.warn('Native getCurrentPosition failed, falling back to navigator:', err);
+
+    // Tier 2: Capacitor Low Accuracy
+    try {
+      const pos = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 30000
+      });
+      if (pos && pos.coords) {
+        return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      }
+    } catch (err) {
+      console.warn('Native low accuracy getCurrentPosition failed, trying navigator:', err);
+    }
   }
 
+  // Tier 3: Navigator Geolocation Fallback
   return new Promise((resolve) => {
     if (!('geolocation' in navigator)) {
       resolve(null);
@@ -57,13 +78,15 @@ export async function getCurrentPosition(): Promise<{ lat: number; lng: number }
         resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
       (err) => {
-        console.warn('Navigator getCurrentPosition failed:', err.message);
-        // Retry with low accuracy
+        console.warn('Navigator getCurrentPosition high accuracy failed, trying low accuracy:', err.message);
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
           },
-          () => resolve(null),
+          (err2) => {
+            console.warn('Navigator getCurrentPosition low accuracy failed:', err2.message);
+            resolve(null);
+          },
           { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
         );
       },
@@ -76,24 +99,104 @@ export async function watchLocation(
   onLocation: (lat: number, lng: number) => void,
   onError?: (err: any) => void
 ): Promise<() => void> {
-  await requestLocationPermissions();
+  await requestLocationPermissions().catch(() => {});
 
-  let watchId: string | number | null = null;
   let isCancelled = false;
+  let nativeWatchId: string | null = null;
+  let navWatchId: number | null = null;
+
+  const cleanup = () => {
+    isCancelled = true;
+    if (nativeWatchId !== null) {
+      Geolocation.clearWatch({ id: nativeWatchId }).catch(e => console.warn('clearWatch error:', e));
+      nativeWatchId = null;
+    }
+    if (navWatchId !== null && 'geolocation' in navigator) {
+      navigator.geolocation.clearWatch(navWatchId);
+      navWatchId = null;
+    }
+  };
+
+  const startNavigatorWatch = () => {
+    if (isCancelled || !('geolocation' in navigator)) return;
+
+    navWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!isCancelled && pos && pos.coords) {
+          onLocation(pos.coords.latitude, pos.coords.longitude);
+        }
+      },
+      (err) => {
+        if (isCancelled) return;
+        console.warn('Navigator watchPosition high accuracy error, trying low accuracy:', err.message);
+        // Fallback to low accuracy
+        if (navWatchId !== null) {
+          navigator.geolocation.clearWatch(navWatchId);
+        }
+        navWatchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            if (!isCancelled && pos && pos.coords) {
+              onLocation(pos.coords.latitude, pos.coords.longitude);
+            }
+          },
+          (err2) => {
+            if (!isCancelled && onError) onError(err2);
+          },
+          { enableHighAccuracy: false, timeout: 20000, maximumAge: 10000 }
+        );
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
+    );
+  };
 
   if (isNativeApp()) {
     try {
+      let isHighAccuracyFallbackDone = false;
+
       const id = await Geolocation.watchPosition(
         {
           enableHighAccuracy: true,
-          timeout: 20000,
+          timeout: 15000,
           maximumAge: 3000
         },
         (position, err) => {
           if (isCancelled) return;
           if (err) {
-            console.warn('Capacitor Geolocation watchPosition error:', err);
-            if (onError) onError(err);
+            console.warn('Native watchPosition high accuracy error:', err);
+            if (!isHighAccuracyFallbackDone) {
+              isHighAccuracyFallbackDone = true;
+              // Clear high accuracy watch and fallback to low accuracy / navigator
+              if (nativeWatchId !== null) {
+                Geolocation.clearWatch({ id: nativeWatchId }).catch(() => {});
+                nativeWatchId = null;
+              }
+              Geolocation.watchPosition(
+                {
+                  enableHighAccuracy: false,
+                  timeout: 20000,
+                  maximumAge: 10000
+                },
+                (pos2, err2) => {
+                  if (isCancelled) return;
+                  if (err2) {
+                    console.warn('Native watchPosition low accuracy error, falling back to navigator:', err2);
+                    startNavigatorWatch();
+                  } else if (pos2 && pos2.coords) {
+                    onLocation(pos2.coords.latitude, pos2.coords.longitude);
+                  }
+                }
+              ).then((id2) => {
+                if (isCancelled) {
+                  Geolocation.clearWatch({ id: id2 }).catch(() => {});
+                } else {
+                  nativeWatchId = id2;
+                }
+              }).catch(() => {
+                startNavigatorWatch();
+              });
+            } else {
+              if (onError) onError(err);
+            }
             return;
           }
           if (position && position.coords) {
@@ -101,39 +204,14 @@ export async function watchLocation(
           }
         }
       );
-      watchId = id;
+      nativeWatchId = id;
 
-      return () => {
-        isCancelled = true;
-        if (watchId !== null) {
-          Geolocation.clearWatch({ id: watchId as string }).catch(e => console.warn('clearWatch error:', e));
-        }
-      };
+      return cleanup;
     } catch (err) {
-      console.warn('Native watchPosition failed, falling back to web API:', err);
+      console.warn('Native watchPosition setup failed, falling back to navigator:', err);
     }
   }
 
-  if ('geolocation' in navigator) {
-    const navWatchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        if (!isCancelled && pos && pos.coords) {
-          onLocation(pos.coords.latitude, pos.coords.longitude);
-        }
-      },
-      (err) => {
-        if (!isCancelled && onError) onError(err);
-      },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
-    );
-
-    return () => {
-      isCancelled = true;
-      navigator.geolocation.clearWatch(navWatchId);
-    };
-  }
-
-  return () => {
-    isCancelled = true;
-  };
+  startNavigatorWatch();
+  return cleanup;
 }

@@ -40,8 +40,14 @@ export default function DriverMapView({
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
 
   const [roadCoords, setRoadCoords] = useState<[number, number][]>([]);
-  const trackingVehicleId = activeTrip?.vehicleId || currentRoute?.vehicleId || userData?.vehicleId || 'DEV-V1';
-  const userVehicle = vehicles.find(v => v && v.id === trackingVehicleId);
+  const driverUid = userData?.id || userData?.uid;
+  const userVehicle = vehicles.find(v => v && (
+    v.id === activeTrip?.vehicleId ||
+    v.id === currentRoute?.vehicleId ||
+    v.id === userData?.vehicleId ||
+    (driverUid && v.driverId === driverUid) ||
+    (currentRoute?.id && v.routeId === currentRoute.id)
+  )) || vehicles[0] || null;
 
   const mapRef = useRef<any>(null);
   const transitionPending = useRef<string | null>(null);
@@ -304,7 +310,17 @@ export default function DriverMapView({
 
       // 3. Set Vehicles
       if (res.vehicles) {
-        setVehicles(res.vehicles);
+        const mappedVehicles = res.vehicles.map((v: any) => {
+          const locObj = (v.latitude !== null && v.longitude !== null && v.latitude !== undefined && v.longitude !== undefined)
+            ? { lat: Number(v.latitude), lng: Number(v.longitude) }
+            : (typeof v.location === 'string' ? (() => { try { return JSON.parse(v.location); } catch(e) { return null; } })() : v.location || res.org?.location || null);
+          return {
+            ...v,
+            plateNumber: v.plateNumber || v.number || "BUS-01",
+            location: locObj
+          };
+        });
+        setVehicles(mappedVehicles);
       }
 
       // 4. Set Route Manifest (users on active route)
@@ -330,7 +346,6 @@ export default function DriverMapView({
     if (driverData) {
       processMapData(driverData);
       setLoading(false);
-      return;
     }
 
     const fetchMySQLDriverMapData = async () => {
@@ -1266,20 +1281,18 @@ export default function DriverMapView({
             );
           })}
 
-          {vehicles
-            .filter((v: any) => v && v.id === trackingVehicleId)
-            .map((v: any) => v.location && isValidCoordinate(v.location.lat, v.location.lng) && (
-              <Marker 
-                key={`bus-${v.id}-${parseFloat(v.location.lat)}-${parseFloat(v.location.lng)}`} 
-                position={[parseFloat(v.location.lat), parseFloat(v.location.lng)]} 
-                icon={createMarkerIcon(
-                  '#2563eb', 
-                  getLocalIcon('bus'), 
-                  '#2563eb', 
-                  v.plateNumber ? `BUS: ${v.plateNumber}` : 'YOUR BUS'
-                )} 
-              />
-            ))}
+          {userVehicle && userVehicle.location && isValidCoordinate(userVehicle.location.lat, userVehicle.location.lng) && (
+            <Marker 
+              key={`bus-${userVehicle.id}-${parseFloat(userVehicle.location.lat)}-${parseFloat(userVehicle.location.lng)}`} 
+              position={[parseFloat(userVehicle.location.lat), parseFloat(userVehicle.location.lng)]} 
+              icon={createMarkerIcon(
+                '#2563eb', 
+                getLocalIcon('bus'), 
+                '#2563eb', 
+                userVehicle.plateNumber ? `BUS: ${userVehicle.plateNumber}` : 'YOUR BUS'
+              )} 
+            />
+          )}
         </MapComponent>
 
 
