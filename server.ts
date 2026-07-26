@@ -5029,20 +5029,9 @@ async function start() {
     });
     app.use(vite.middlewares);
     
-    // Serve privacy policy in development
-    app.get('/privacy-policy.html', (req, res) => {
-      const privacyPolicyPath = path.join(process.cwd(), 'client/public/privacy-policy.html');
-      if (fs.existsSync(privacyPolicyPath)) {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.sendFile(privacyPolicyPath);
-      } else {
-        res.status(404).send('Privacy Policy not found');
-      }
-    });
-    
     app.use(async (req, res, next) => {
       const url = req.originalUrl;
-      if (url.startsWith('/api') || url === '/privacy-policy.html') return next();
+      if (url.startsWith('/api')) return next();
       
       try {
         let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
@@ -5054,19 +5043,7 @@ async function start() {
       }
     });
   } else {
-    // Serve privacy policy BEFORE static middleware and SPA catch-all
-    app.get('/privacy-policy.html', (req, res) => {
-      const privacyPolicyPath = path.join(process.cwd(), 'client/public/privacy-policy.html');
-      if (fs.existsSync(privacyPolicyPath)) {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.sendFile(privacyPolicyPath);
-      } else {
-        res.status(404).send('Privacy Policy not found');
-      }
-    });
-    
     const distPath = path.join(process.cwd(), "dist");
-    // Serve static files from dist
     app.use(express.static(distPath));
   }
 
