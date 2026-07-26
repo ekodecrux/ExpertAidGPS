@@ -266,6 +266,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Custom Express local authentication POST directly to MySQL
       const backendUrl = getBackendUrl();
+      console.log('[LOGIN] Backend URL:', backendUrl);
+      console.log('[LOGIN] Attempting login with email:', email);
+      
       const loginRes = await fetch(`${backendUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
@@ -274,6 +277,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password: pass })
       });
 
+      console.log('[LOGIN] Response status:', loginRes.status);
+      console.log('[LOGIN] Response headers:', Object.fromEntries(loginRes.headers.entries()));
+      
       if (!loginRes.ok) {
         let errorResult: any = { error: 'Authentication failed.' };
         try {
@@ -337,7 +343,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserData(apiUserData);
       localStorage.setItem(`expert_gps_user_${resUser.uid}`, JSON.stringify(apiUserData));
       setLoading(false);
+      console.log('[LOGIN] Success! User logged in:', resUser.email);
     } catch (err: any) {
+      console.error('[LOGIN] Error:', err.message);
+      console.error('[LOGIN] Full error:', err);
       setUser(null);
       setUserData(null);
       localStorage.removeItem("expert_gps_fallback_token");
