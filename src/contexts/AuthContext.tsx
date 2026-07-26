@@ -4,6 +4,7 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import toast from 'react-hot-toast';
+import { getBackendUrl } from '../lib/apiPatch';
 
 interface UserData {
   uid: string;
