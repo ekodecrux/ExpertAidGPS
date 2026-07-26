@@ -13,7 +13,15 @@ public class MainActivity extends BridgeActivity {
   @Override
   protected void onStart() {
     super.onStart();
-    requestLocationPermissions();
+    // Request permissions asynchronously - don't block UI
+    requestLocationPermissionsAsync();
+  }
+
+  private void requestLocationPermissionsAsync() {
+    // Use a handler to delay permission request so UI can render first
+    getWindow().getDecorView().post(() -> {
+      requestLocationPermissions();
+    });
   }
 
   private void requestLocationPermissions() {
