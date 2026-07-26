@@ -5022,17 +5022,6 @@ async function start() {
     }
   });
 
-  // Serve privacy policy
-  app.get('/privacy-policy.html', (req, res) => {
-    const privacyPolicyPath = path.join(process.cwd(), 'client/public/privacy-policy.html');
-    if (fs.existsSync(privacyPolicyPath)) {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.sendFile(privacyPolicyPath);
-    } else {
-      res.status(404).send('Privacy Policy not found');
-    }
-  });
-
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -5055,7 +5044,19 @@ async function start() {
     });
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    // Serve static files from dist
     app.use(express.static(distPath));
+    
+    // Serve privacy policy before SPA catch-all
+    app.get('/privacy-policy.html', (req, res) => {
+      const privacyPolicyPath = path.join(process.cwd(), 'dist/privacy-policy.html');
+      if (fs.existsSync(privacyPolicyPath)) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.sendFile(privacyPolicyPath);
+      } else {
+        res.status(404).send('Privacy Policy not found');
+      }
+    });
   }
 
   // API 404 handler - must be after all specific API routes
