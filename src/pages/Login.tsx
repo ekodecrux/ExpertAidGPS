@@ -86,6 +86,9 @@ export default function Login() {
   const currentLogoUrl = getAutoDetectedOrgLogo(currentOrg);
   const currentName = currentOrg?.name || "Expert GPS Tracking";
   const currentSector = currentOrg ? `${currentOrg.sector || 'Organization'} Portal` : "Fleet Intelligence Platform";
+  
+  // Use ExpertAid logo for login screen
+  const expertAidLogoUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Exp_logo.svg/1200px-Exp_logo.svg.png';
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,6 +165,25 @@ export default function Login() {
             </div>
           </div>
         ), { duration: 10000 });
+      } else if (errorMsg.includes('Unexpected token') || errorMsg.includes('<!doctype') || errorMsg.includes('is not valid JSON')) {
+        toast.error((t) => (
+          <div className="flex flex-col gap-2 p-1">
+            <span className="font-bold flex items-center gap-1 text-red-600">
+              <AlertCircle size={14} /> Backend Connection Error
+            </span>
+            <span className="text-[10px] leading-tight">
+              The backend server is not responding correctly. Please ensure the backend API is running and the server URL is correct.
+            </span>
+            <div className="flex gap-2 mt-1">
+              <button 
+                onClick={() => toast.dismiss(t.id)}
+                className="text-[10px] bg-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-300"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ), { duration: 10000 });
       } else {
         toast.error(errorMsg || 'Login failed. Please check credentials.');
       }
@@ -217,20 +239,17 @@ export default function Login() {
 
       <div className="max-w-md w-full bg-white rounded-[2.25rem] shadow-xl overflow-hidden border border-slate-100/85 z-10 relative">
         <div className="p-6 pb-2 text-center">
-            {currentLogoUrl ? (
-              <div className="w-16 h-16 bg-white border border-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg p-2.5 transition-all duration-300">
-                <img 
-                  src={currentLogoUrl} 
-                  alt={currentName} 
-                  className="w-full h-full object-contain" 
-                  referrerPolicy="no-referrer" 
-                />
-              </div>
-            ) : (
-              <div className="w-14 h-14 bg-blue-500 rounded-[1.25rem] flex items-center justify-center mx-auto mb-3 shadow-xl shadow-blue-500/20">
-                <Bus className="w-7 h-7 text-white" />
-              </div>
-            )}
+            <div className="w-16 h-16 bg-white border border-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg p-2.5 transition-all duration-300">
+              <img 
+                src={expertAidLogoUrl} 
+                alt="ExpertAid" 
+                className="w-full h-full object-contain" 
+                referrerPolicy="no-referrer" 
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight mb-0.5 text-slate-900 transition-all duration-300">{currentName}</h1>
             <p className="text-slate-400 font-bold text-[8px] sm:text-[10px] uppercase tracking-[0.25em] transition-all duration-300">{currentSector}</p>
         </div>
