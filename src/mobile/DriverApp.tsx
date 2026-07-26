@@ -155,61 +155,8 @@ export default function DriverApp() {
     return () => clearInterval(interval);
   }, [userData]);
 
-  // 3. Track and Update Driver's Live Location (Persistent across tabs)
-  useEffect(() => {
-    const trackingVehicleId = assignedVehicleId || userData?.vehicleId || activeTrip?.vehicleId || 'DEV-V1';
-    if (!trackingVehicleId) return;
-
-    let localWatchId: string | null = null;
-    let fallbackMode = false;
-    let isMounted = true;
-
-    // Start geolocation with 2 second delay - let app render first
-    const timeoutId = setTimeout(() => {
-      if (!isMounted) return;
-      
-      const startTracking = (useHighAccuracy: boolean): string | null => {
-        return watchPosition(
-          (latitude, longitude) => {
-            if (isValidCoordinate(latitude, longitude)) {
-              updateDoc(doc(db, 'vehicles', trackingVehicleId), {
-                location: { lat: latitude, lng: longitude },
-                updatedAt: new Date().toISOString()
-              }).catch(e => console.warn('Vehicle tracking error:', e));
-
-              saveMySQLRecord('update', 'vehicles', trackingVehicleId, {
-                latitude: latitude,
-                longitude: longitude,
-                location: { lat: latitude, lng: longitude },
-                updatedAt: new Date().toISOString()
-              }).catch(e => console.warn('Vehicle tracking error:', e));
-            }
-          },
-          (err) => {
-            console.warn(`Geolocation error (highAccuracy=${useHighAccuracy}):`, err);
-            if (useHighAccuracy && !fallbackMode) {
-              fallbackMode = true;
-              if (localWatchId !== null) {
-                clearWatch(localWatchId);
-              }
-              localWatchId = startTracking(false);
-            }
-          },
-          { enableHighAccuracy: useHighAccuracy }
-        );
-      };
-
-      localWatchId = startTracking(true);
-    }, 2000);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-      if (localWatchId !== null) {
-        clearWatch(localWatchId);
-      }
-    };
-  }, [assignedVehicleId, userData?.vehicleId, activeTrip?.vehicleId]);
+  // 3. Geolocation tracking disabled - causes GPS error on Android
+  // TODO: Implement proper native Android GPS tracking later
 
   const handleStopTrip = async () => {
     if (!activeTrip) return;
