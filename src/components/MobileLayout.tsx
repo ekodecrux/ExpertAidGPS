@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Home, Map, Bell, User, Settings as SettingsIcon, Menu, X, LogOut, Shield, Truck, Users, MessageSquare, Clock, Navigation, Compass, CheckCircle, XCircle } from 'lucide-react';
-import { cn, getLocalAvatar, getUserAvatar, getLocalIcon, cleanMessage } from '../lib/utils';
+import { cn, getLocalAvatar, getUserAvatar, getLocalIcon, cleanMessage, getNotifications } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
@@ -38,7 +38,7 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  const notifications = userData?.notifications || [];
+  const notifications = getNotifications(userData);
   const activeNotifications = notifications.filter((n: any) => !n.dismissed);
   const hasUnread = activeNotifications.length > 0; 
 
@@ -83,9 +83,10 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   }, [userData]);
 
   const handleDismissAll = async () => {
-    if (!userData || !userData.notifications) return;
+    const notifs = getNotifications(userData);
+    if (!userData || notifs.length === 0) return;
     try {
-      const updatedNotifs = userData.notifications.map(n => ({ ...n, dismissed: true }));
+      const updatedNotifs = notifs.map(n => ({ ...n, dismissed: true }));
       
       // Update both MySQL and Firestore to ensure perfect sync
       await Promise.all([
@@ -273,16 +274,16 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
 
       {/* Main Content */}
       <main className={cn(
-        "flex-1 relative",
-        (activeTab === 'map' || activeTab === 'track') ? "overflow-hidden flex flex-col" : "overflow-y-auto"
+        "flex-1 relative flex flex-col min-h-0",
+        (activeTab === 'map' || activeTab === 'track') ? "overflow-hidden" : "overflow-y-auto"
       )}>
         <motion.div
           key={activeTab}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className={cn(
-            "transition-all duration-300",
-            (activeTab === 'map' || activeTab === 'track') ? "h-full relative p-0" : "p-4 min-h-full pb-24"
+            "transition-all duration-300 flex-1 flex flex-col relative",
+            (activeTab === 'map' || activeTab === 'track') ? "h-full p-0 overflow-hidden" : "p-4 min-h-full pb-24"
           )}
         >
           {children}
@@ -290,10 +291,7 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
       </main>
 
       {/* Bottom Navigation */}
-      <nav className={cn(
-        "bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3 flex justify-between items-center z-[5000] shadow-[0_-8px_30px_rgba(0,0,0,0.06)]",
-        (activeTab === 'map' || activeTab === 'track') ? "pb-3" : "pb-8"
-      )}>
+      <nav className="bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3 pb-8 flex justify-between items-center z-[5000] shadow-[0_-8px_30px_rgba(0,0,0,0.06)]">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

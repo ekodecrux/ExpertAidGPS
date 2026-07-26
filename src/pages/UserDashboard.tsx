@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, isValidCoordinate, getSectorTerminology, getSortedStops, getLocalIcon, cleanMessage } from '../lib/utils';
+import { cn, isValidCoordinate, getSectorTerminology, getSortedStops, getLocalIcon, cleanMessage, getNotifications } from '../lib/utils';
 
 interface UserDashboardProps {
   userDbData?: any;
@@ -43,11 +43,11 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
 
   useEffect(() => {
     if (!userData) return;
-    const uData = userData as any;
-    if (!uData.notifications || uData.notifications.length === 0) return;
+    const notifs = getNotifications(userData);
+    if (notifs.length === 0) return;
 
     // Check recent notifications for any new undismissed ones
-    uData.notifications.forEach((notif: any) => {
+    notifs.forEach((notif: any) => {
       if (notif.dismissed) return;
       
       const notifTime = new Date(notif.timestamp).getTime();
@@ -826,15 +826,15 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
               Live Feed
             </h4>
             <div className="h-px flex-1 mx-4 bg-slate-800"></div>
-            {(userData as any)?.notifications?.filter((n: any) => !n.dismissed).length > 0 && (
+            {getNotifications(userData).filter((n: any) => !n.dismissed).length > 0 && (
               <span className="text-[9px] font-black bg-blue-600/20 text-blue-400 px-2.5 py-1 rounded-full uppercase tracking-widest border border-blue-600/30">
-                {(userData as any).notifications.filter((n: any) => !n.dismissed).length} New
+                {getNotifications(userData).filter((n: any) => !n.dismissed).length} New
               </span>
             )}
           </div>
           <div className="space-y-4">
-            {(userData as any)?.notifications?.length > 0 ? (
-              (userData as any).notifications.slice(-3).reverse().map((n: any, i: number) => (
+            {getNotifications(userData).length > 0 ? (
+              getNotifications(userData).slice(-3).reverse().map((n: any, i: number) => (
                 <AlertItem key={i} text={cleanMessage(n.message)} time={new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toUpperCase()} />
               ))
             ) : (

@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Polyline 
 import L from 'leaflet';
 import { Locate, Maximize2, Layers, Plus, Minus, Navigation, Target } from 'lucide-react';
 import { cn, getLocalIcon } from '../lib/utils';
+import { getCurrentPosition } from '../lib/locationService';
 import toast from 'react-hot-toast';
 
 // Fix for default marker icons in Leaflet with React
@@ -229,42 +230,13 @@ function CustomControls({
     map.invalidateSize();
   }, [map]);
 
-  const onLocate = () => {
-    // Show a small hint that we're locating
-    console.log("Attempting to locate...");
-    
-    map.locate({
-      setView: false,
-      maxZoom: 16,
-      enableHighAccuracy: false,
-      timeout: 20000,           // Increased timeout to 20s
-      maximumAge: 30000          // Use cached location if newer than 30s
-    });
-
-    const onLocationFound = (e: L.LocationEvent) => {
-      map.flyTo(e.latlng, 16);
-      map.off('locationerror', onLocationError);
-    };
-
-    const onLocationError = (e: L.ErrorEvent) => {
-      console.warn("Leaflet location error:", e.message);
-      // Fallback to navigator if Leaflet fails
-      if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition((pos) => {
-          map.flyTo([pos.coords.latitude, pos.coords.longitude], 16);
-        }, (err) => {
-          console.warn("Navigator geolocation fallback completed but could not acquire precise coordinate:", err.message);
-        }, {
-          enableHighAccuracy: false,
-          timeout: 40000,
-          maximumAge: 120000
-        });
-      }
-      map.off('locationfound', onLocationFound);
-    };
-
-    map.once('locationfound', onLocationFound);
-    map.once('locationerror', onLocationError);
+  const onLocate = async () => {
+    const pos = await getCurrentPosition();
+    if (pos && typeof pos.lat === 'number' && typeof pos.lng === 'number') {
+      map.flyTo([pos.lat, pos.lng], 16);
+    } else {
+      toast.error('Unable to retrieve current location. Please verify GPS settings.');
+    }
   };
 
   const onFitDriverAndStop = () => {
@@ -436,16 +408,7 @@ export default function MapComponent({
   }, [zoom]);
 
   useEffect(() => {
-    const handleResize = () => {
-      if (height === '100%') {
-        setCurrentHeight(window.innerWidth < 1024 ? '450px' : '100%');
-      } else {
-        setCurrentHeight(height);
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    setCurrentHeight(height);
   }, [height]);
 
   let mapCenterLat = typeof currentCenter?.lat === 'number' && !isNaN(currentCenter?.lat) ? currentCenter.lat : 17.4504;

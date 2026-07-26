@@ -3,17 +3,16 @@ import MobileLayout from '../components/MobileLayout';
 import DriverDashboard from '../pages/DriverDashboard';
 import DriverRoutesView from './DriverRoutesView';
 import DriverMapView from './DriverMapView';
-import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight, AlertCircle } from 'lucide-react';
+import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, auth, auth as firebaseAuth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { isValidCoordinate, cn, getLocalAvatar, getUserAvatar } from '../lib/utils';
+import { watchLocation } from '../lib/locationService';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { saveMySQLRecord } from '../lib/mysql';
-import { watchPosition, clearWatch, requestLocationPermission as requestLocationPermissionBrowser } from '../lib/geolocationHelper';
-import { requestLocationPermission } from '../lib/permissionHelper';
 
 export default function DriverApp() {
   const [activeTab, setActiveTab] = useState('home');
@@ -44,13 +43,7 @@ export default function DriverApp() {
     _setActiveTrip(trip);
   };
   const [driverDataLoading, setDriverDataLoading] = useState<boolean>(!driverData);
-  const [driverDataError, setDriverDataError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Request location permission on app startup
-  useEffect(() => {
-    requestLocationPermission().catch(e => console.log('[DriverApp] Permission request error:', e));
-  }, []);
 
   useEffect(() => {
     if (userData?.orgId) {
@@ -149,7 +142,6 @@ export default function DriverApp() {
           console.warn("Transient network connection to /api/records/user-data in DriverApp is resolving...");
         } else {
           console.error("Error fetching active trip in DriverApp:", err);
-          setDriverDataError(err?.message || 'Failed to load driver data');
         }
       }
     };
@@ -166,46 +158,36 @@ export default function DriverApp() {
     const trackingVehicleId = assignedVehicleId || userData?.vehicleId || activeTrip?.vehicleId || 'DEV-V1';
     if (!trackingVehicleId) return;
 
-    let localWatchId: string | null = null;
-    let isMounted = true;
+    let cleanupWatch: (() => void) | null = null;
 
-    // Start geolocation with 2 second delay - let app render first
-    const timeoutId = setTimeout(() => {
-      if (!isMounted) return;
-      
-      const startTracking = (useHighAccuracy: boolean): string | null => {
-        return watchPosition(
-          (latitude, longitude) => {
-            if (isValidCoordinate(latitude, longitude)) {
-              updateDoc(doc(db, 'vehicles', trackingVehicleId), {
-                location: { lat: latitude, lng: longitude },
-                updatedAt: new Date().toISOString()
-              }).catch(e => console.warn('Vehicle tracking error:', e));
+    watchLocation(
+      (latitude, longitude) => {
+        if (isValidCoordinate(latitude, longitude)) {
+          // Update the vehicle's location inside Firestore for real-time sync with children / map
+          updateDoc(doc(db, 'vehicles', trackingVehicleId), {
+            location: { lat: latitude, lng: longitude },
+            updatedAt: new Date().toISOString()
+          }).catch(e => console.warn('Vehicle tracking Firestore updateDoc error:', e));
 
-              saveMySQLRecord('update', 'vehicles', trackingVehicleId, {
-                latitude: latitude,
-                longitude: longitude,
-                location: { lat: latitude, lng: longitude },
-                updatedAt: new Date().toISOString()
-              }).catch(e => console.warn('Vehicle tracking error:', e));
-            }
-          },
-          (err) => {
-            // Silent - don't show error
-            console.log(`Geolocation error (highAccuracy=${useHighAccuracy}):`, err);
-          },
-          { enableHighAccuracy: useHighAccuracy }
-        );
-      };
-
-      localWatchId = startTracking(true);
-    }, 2000);
+          // Update the vehicle's location inside MySQL
+          saveMySQLRecord('update', 'vehicles', trackingVehicleId, {
+            latitude: latitude,
+            longitude: longitude,
+            location: { lat: latitude, lng: longitude },
+            updatedAt: new Date().toISOString()
+          }).catch(e => console.warn('Vehicle tracking saveMySQLRecord error:', e));
+        }
+      },
+      (err) => {
+        console.warn('DriverApp watchLocation error:', err);
+      }
+    ).then((stopFn) => {
+      cleanupWatch = stopFn;
+    });
 
     return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-      if (localWatchId !== null) {
-        clearWatch(localWatchId);
+      if (cleanupWatch) {
+        cleanupWatch();
       }
     };
   }, [assignedVehicleId, userData?.vehicleId, activeTrip?.vehicleId]);
@@ -377,7 +359,6 @@ export default function DriverApp() {
   );
 
   const renderContent = () => {
-    // Render immediately - don't wait for data
     switch (activeTab) {
       case 'home':
         return (
@@ -415,98 +396,108 @@ export default function DriverApp() {
                     className="w-full h-full object-cover" 
                   />
                   <input 
-                    ref={fileInputRef}
                     type="file" 
-                    accept="image/*" 
+                    ref={fileInputRef} 
                     className="hidden" 
-                    onChange={handleFileUpload}
+                    accept="image/*" 
+                    onChange={handleFileUpload} 
                   />
-                  <label 
+                  <button 
                     onClick={() => fileInputRef.current?.click()}
-                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity"
+                    className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   >
-                    <Camera className="text-white" size={28} />
-                  </label>
+                    <Camera className="text-white w-8 h-8" />
+                  </button>
                 </div>
               </div>
-
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">{userData?.name}</h2>
-              <p className="text-[10px] font-black text-slate-400 mt-1 uppercase tracking-[0.2em]">{userData?.role?.replace('_', ' ')} ID: {userData?.uid.slice(0, 8)}</p>
+              <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight leading-none">{userData?.name}</h2>
+              <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-2 px-6 py-1.5 bg-blue-50 rounded-full border border-blue-100">Professional Driver</p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 px-2">
-              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Personal Information</h4>
+            <div className="space-y-4">
+              <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-50 space-y-4">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 mb-4">Personal Details</h3>
                 
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-400">
                     <Mail size={18} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Email</p>
-                    <p className="text-sm font-black text-slate-800 truncate tracking-tight">{userData?.email}</p>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Email Address</p>
+                    <p className="text-xs font-bold text-slate-900">{userData?.email || '---'}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-400">
                     <Phone size={18} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Phone</p>
-                    <p className="text-sm font-black text-slate-800 truncate tracking-tight">{userData?.phone || 'Not Provided'}</p>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Phone Number</p>
+                    <p className="text-xs font-bold text-slate-900">{userData?.phone || 'Not provided'}</p>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Organization</h4>
-                
-                <div className="flex items-center gap-4 p-2">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-400">
                     <Shield size={18} />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Organization</p>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-tighter">{orgName || 'Loading...'}</p>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Working For</p>
+                    <p className="text-xs font-bold text-slate-900 uppercase">{orgName || 'Loading...'}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-400">
+                    <Truck size={18} />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Vehicle Plate</p>
+                    <p className="text-xs font-bold text-slate-900 uppercase italic tracking-wider">{userData?.vehicleId || 'Not Assigned'}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Security</h4>
+              <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-50 space-y-4">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 mb-4">Account Security</h3>
                 
                 <button 
                   onClick={handlePasswordReset}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-amber-50 border border-amber-100 text-amber-900 group transition-all active:scale-95"
+                  className="w-full flex items-center justify-between p-5 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-700 active:scale-95 transition-all"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-amber-200 flex items-center justify-center text-amber-700">
-                      <Key size={18} />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest">Request Password Reset</span>
+                  <div className="flex items-center gap-3">
+                    <Key size={18} />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Change Password</span>
                   </div>
-                  <ChevronRight size={16} className="text-amber-400 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight size={16} />
                 </button>
 
                 <button 
                   onClick={() => logout()}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-900 text-white group transition-all active:scale-95 shadow-xl"
+                  className="w-full py-5 rounded-2xl bg-rose-50 text-rose-600 font-black text-[10px] uppercase tracking-[0.2em] border border-rose-100 hover:bg-rose-100 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
-                      <Power size={18} />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest">Log Out</span>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
+                  <Power size={14} />
+                  Logout Session
                 </button>
               </div>
             </div>
+            
+            <p className="text-center text-[8px] font-bold text-slate-300 uppercase tracking-[0.3em] pb-10">
+              App Version 2.8.5 • Expert GPS Solutions
+            </p>
           </div>
         );
       default:
-        return <DriverDashboard driverData={driverData} setDriverData={setDriverData} driverDataLoading={driverDataLoading} activeTrip={activeTrip} setActiveTrip={setActiveTrip} />;
+        return (
+          <DriverDashboard 
+            driverData={driverData} 
+            setDriverData={setDriverData}
+            driverDataLoading={driverDataLoading}
+            activeTrip={activeTrip}
+            setActiveTrip={setActiveTrip}
+          />
+        );
     }
   };
 

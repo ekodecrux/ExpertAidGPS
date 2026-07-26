@@ -37,9 +37,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function sanitizeUserData(data: any): any {
+  if (!data) return null;
+  let notifications = data.notifications;
+  if (typeof notifications === 'string') {
+    try {
+      notifications = JSON.parse(notifications);
+    } catch (e) {
+      notifications = [];
+    }
+  }
+  if (!Array.isArray(notifications)) {
+    notifications = [];
+  }
+  return {
+    ...data,
+    notifications
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [userData, setUserData] = useState<UserData | null>(null);
+  const [userDataState, setUserDataState] = useState<UserData | null>(null);
+  const setUserData = (data: any) => setUserDataState(sanitizeUserData(data));
+  const userData = userDataState;
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

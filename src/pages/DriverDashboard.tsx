@@ -27,6 +27,7 @@ import MapComponent, {
   Polyline,
 } from "../components/MapComponent";
 import { useAuth } from "../contexts/AuthContext";
+import { watchLocation } from "../lib/locationService";
 import {
   doc,
   onSnapshot,
@@ -200,7 +201,11 @@ export default function DriverDashboard({
   useEffect(() => {
     return () => {
       if (watchId.current) {
-        navigator.geolocation.clearWatch(watchId.current);
+        if (typeof watchId.current === 'function') {
+          (watchId.current as any)();
+        } else if (typeof watchId.current === 'number') {
+          navigator.geolocation.clearWatch(watchId.current);
+        }
       }
     };
   }, []);
@@ -621,7 +626,14 @@ export default function DriverDashboard({
       if (isTracking) {
         // STOP TRIP
         setIsTracking(false);
-        if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
+        if (watchId.current) {
+          if (typeof watchId.current === 'function') {
+            (watchId.current as any)();
+          } else if (typeof watchId.current === 'number') {
+            navigator.geolocation.clearWatch(watchId.current);
+          }
+          watchId.current = null;
+        }
         
         const activeTripId = activeTrip?.id;
 
@@ -879,8 +891,38 @@ export default function DriverDashboard({
           console.warn("[StartTrip] background writes failed:", err);
         });
 
-        // Geolocation tracking is handled by DriverApp component
-        // Removed from here to prevent duplicate tracking and errors
+        // Start geolocation tracking
+        watchLocation(
+          (latitude, longitude) => {
+            if (isValidCoordinate(latitude, longitude)) {
+              // Update Firestore for real-time maps
+              updateDoc(doc(db, "vehicles", vehicle.id), {
+                location: { lat: latitude, lng: longitude },
+                updatedAt: new Date().toISOString(),
+              }).catch((e) =>
+                console.warn("Vehicle tracking Firestore update error:", e),
+              );
+
+              // Update MySQL
+              saveMySQLRecord("update", "vehicles", vehicle.id, {
+                latitude: latitude,
+                longitude: longitude,
+                location: { lat: latitude, lng: longitude },
+                updatedAt: new Date().toISOString(),
+              }).catch((err) =>
+                console.warn(
+                  "Failed to update vehicle coords in MySQL:",
+                  err,
+                ),
+              );
+            }
+          },
+          (err) => {
+            console.warn("DriverDashboard watchLocation error:", err);
+          }
+        ).then((stopFn) => {
+          (watchId as any).current = stopFn;
+        });
       }
     } catch (error) {
       console.error("Error toggling trip status:", error);

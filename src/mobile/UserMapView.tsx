@@ -3,7 +3,7 @@ import MapComponent, { Marker, Popup, Polyline, vehicleIcon, stationIcon, create
 import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, collection, query, where, limit, getDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { isValidCoordinate, getDistance, cn, getSortedStops, getLocalIcon, cleanMessage } from '../lib/utils';
+import { isValidCoordinate, getDistance, cn, getSortedStops, getLocalIcon, cleanMessage, getNotifications } from '../lib/utils';
 import { Activity, Navigation, Info, Bell, MapPin, Clock, Shield, Truck, X, CheckCircle, Home } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'react-hot-toast';
@@ -190,10 +190,10 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
 
   const addNotification = async (message: string, type?: string) => {
     if (!userData) return;
-    const uData = userData as any;
+    const currentNotifs = getNotifications(userData);
     
     // Check if this specific notification already exists in the doc to avoid DB bloat
-    const alreadyNotified = uData.notifications?.some((n: any) => 
+    const alreadyNotified = currentNotifs.some((n: any) => 
       n.message === message && 
       (new Date().getTime() - new Date(n.timestamp).getTime() < 3600000) // Within last hour
     );
@@ -203,9 +203,8 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
     }
 
     try {
-      const existingNotifs = Array.isArray(uData.notifications) ? uData.notifications : [];
       const updatedNotifs = [
-        ...existingNotifs,
+        ...currentNotifs,
         {
           message,
           type: type || 'general',
@@ -571,7 +570,7 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
         </div>
       </div>
 
-      <div className="-mx-4 overflow-hidden border-y border-slate-100 shadow-2xl bg-white relative h-[45vh] min-h-[400px]">
+      <div className="overflow-hidden border border-slate-200/80 rounded-3xl shadow-2xl bg-white relative flex-1 min-h-[350px]">
         <MapComponent 
           height="100%" 
           zoom={14} 
@@ -813,8 +812,8 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
               </div>
               
               <div className="space-y-4">
-                {uData?.notifications?.length > 0 ? (
-                  uData.notifications.slice().reverse().map((n: any, i: number) => {
+                {getNotifications(userData).length > 0 ? (
+                  getNotifications(userData).slice().reverse().map((n: any, i: number) => {
                     const messageCleaned = cleanMessage(n.message);
                     const isStart = n.type === 'trip_start' || n.type === 'start' || n.message?.toLowerCase().includes('started');
                     const isEnd = n.type === 'trip_end' || n.type === 'end' || n.message?.toLowerCase().includes('completed');

@@ -8,7 +8,6 @@ import DriverDashboard from './pages/DriverDashboard';
 import UserDashboard from './pages/UserDashboard';
 import { Toaster } from 'react-hot-toast';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
 
 import DriverApp from './mobile/DriverApp';
 import UserApp from './mobile/UserApp';
@@ -17,17 +16,6 @@ function AppContent() {
   const { userData, loading } = useAuth();
   
   const isMobileRole = userData?.role === 'driver' || userData?.role === 'user';
-  
-  // Clear stale cache on app startup
-  useEffect(() => {
-    if (userData?.id || userData?.uid) {
-      // Clear all localStorage entries that might be stale
-      const keysToDelete = Object.keys(localStorage).filter(key => 
-        key.includes('expert_gps') || key.includes('user_db_data')
-      );
-      keysToDelete.forEach(key => localStorage.removeItem(key));
-    }
-  }, []);
 
   if (loading) {
     return (

@@ -3,10 +3,10 @@ import MobileLayout from '../components/MobileLayout';
 import UserDashboard from '../pages/UserDashboard';
 import UserMapView from './UserMapView';
 import UserRoutesView from './UserRoutesView';
-import { Home, Compass, Bell, User, MapPin, Bus, Clock, Mail, Phone, Shield, Key, Camera, CheckCircle, ChevronRight, LogOut, Navigation, X, XCircle, AlertCircle } from 'lucide-react';
+import { Home, Compass, Bell, User, MapPin, Bus, Clock, Mail, Phone, Shield, Key, Camera, CheckCircle, ChevronRight, LogOut, Navigation, X, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
-import { cn, getLocalAvatar, getUserAvatar, cleanMessage } from '../lib/utils';
+import { cn, getLocalAvatar, getUserAvatar, cleanMessage, getNotifications } from '../lib/utils';
 
 import { doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
@@ -29,7 +29,6 @@ export default function UserApp() {
     }
   });
   const [userDbDataLoading, setUserDbDataLoading] = useState<boolean>(!userDbData);
-  const [userDbDataError, setUserDbDataError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userData) return;
@@ -84,10 +83,8 @@ export default function UserApp() {
             }
           }
         }
-      } catch (err: any) {
+      } catch (err) {
         console.warn("UserApp MySQL poll failed, falling back to cache/Firestore:", err);
-        const errMsg = err?.message || String(err);
-        if (isMounted) setUserDbDataError(errMsg);
         try {
           if (userData.orgId) {
             const orgDoc = await getDoc(doc(db, 'organizations', userData.orgId));
@@ -103,10 +100,8 @@ export default function UserApp() {
               }
             }
           }
-          if (isMounted) setUserDbDataError(null);
-        } catch (fErr: any) {
+        } catch (fErr) {
           console.error("Firestore fallback failed too:", fErr);
-          if (isMounted) setUserDbDataError(fErr?.message || 'Failed to load data');
         }
       } finally {
         if (isMounted) {
@@ -164,8 +159,8 @@ export default function UserApp() {
 
   const dismissNotification = async (timestamp: string) => {
     if (!userData) return;
-    const uData = userData as any;
-    const updatedNotifs = uData.notifications.map((n: any) => 
+    const notifs = getNotifications(userData);
+    const updatedNotifs = notifs.map((n: any) => 
       n.timestamp === timestamp ? { ...n, dismissed: true } : n
     );
     try {
@@ -179,8 +174,8 @@ export default function UserApp() {
 
   const markAllAsRead = async () => {
     if (!userData) return;
-    const uData = userData as any;
-    const updatedNotifs = uData.notifications.map((n: any) => ({ ...n, dismissed: true }));
+    const notifs = getNotifications(userData);
+    const updatedNotifs = notifs.map((n: any) => ({ ...n, dismissed: true }));
     try {
       await saveMySQLRecord('update', 'users', userData.id || userData.uid, {
         notifications: updatedNotifs
@@ -203,11 +198,11 @@ export default function UserApp() {
   
   useEffect(() => {
     if (!userData) return;
-    const uData = userData as any;
-    if (!uData.notifications || uData.notifications.length === 0) return;
+    const notifs = getNotifications(userData);
+    if (notifs.length === 0) return;
 
     // Check recent notifications for any new undismissed ones
-    uData.notifications.forEach((notif: any) => {
+    notifs.forEach((notif: any) => {
       if (notif.dismissed) return;
       
       const notifTime = new Date(notif.timestamp).getTime();
@@ -273,36 +268,14 @@ export default function UserApp() {
       id: 'alerts', 
       label: 'Security', 
       icon: Bell,
-      badge: (userData as any)?.notifications?.some((n: any) => !n.dismissed)
+      badge: getNotifications(userData).some((n: any) => !n.dismissed)
     },
     { id: 'profile', label: 'Account', icon: User },
   ];
 
+  const userNotifs = getNotifications(userData);
+
   const renderContent = () => {
-    if (userDbDataLoading && !userDbData) {
-      return (
-        <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600 font-bold text-sm">Loading your data...</p>
-        </div>
-      );
-    }
-    
-    if (userDbDataError && !userDbData) {
-      return (
-        <div className="flex items-center justify-center min-h-screen flex-col gap-4 p-4">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-            <AlertCircle size={32} className="text-red-600" />
-          </div>
-          <h2 className="text-lg font-black text-slate-900 text-center">Unable to Load App</h2>
-          <p className="text-sm text-slate-600 text-center">{userDbDataError}</p>
-          <button onClick={() => window.location.reload()} className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm">
-            Retry
-          </button>
-        </div>
-      );
-    }
-    
     switch (activeTab) {
       case 'home':
         return <UserDashboard userDbData={userDbData} userDbDataLoading={userDbDataLoading} />;
@@ -315,7 +288,7 @@ export default function UserApp() {
           <div className="space-y-6">
             <div className="flex justify-between items-end">
               <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Strategic Alerts</h2>
-              {(userData as any)?.notifications?.some((n: any) => !n.dismissed) && (
+              {userNotifs.some((n: any) => !n.dismissed) && (
                 <button 
                   onClick={markAllAsRead}
                   className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline"
@@ -325,8 +298,8 @@ export default function UserApp() {
               )}
             </div>
             <div className="space-y-4 pb-20">
-              {(userData as any)?.notifications?.length > 0 ? (
-                (userData as any).notifications.slice().reverse().map((notif: any, i: number) => {
+              {userNotifs.length > 0 ? (
+                userNotifs.slice().reverse().map((notif: any, i: number) => {
                   const messageCleaned = cleanMessage(notif.message);
                   const isStart = notif.type === 'trip_start' || notif.type === 'start' || notif.message?.toLowerCase().includes('started');
                   const isEnd = notif.type === 'trip_end' || notif.type === 'end' || notif.message?.toLowerCase().includes('completed');
