@@ -1,0 +1,8 @@
+# This file is intentionally tracked in git as a template
+# Users should copy this to local.properties and update the paths for their system
+
+# Android SDK path - use forward slashes even on Windows
+sdk.dir=C:/Users/admin/AppData/Local/Android/Sdk
+
+# Optional: Java home
+# java.home=C:/Program Files/Java/jdk-17
