@@ -21,6 +21,12 @@ export function isNativeApp(): boolean {
 export const DEFAULT_PRODUCTION_URL = 'https://expertaidgps-utabsjvh.manus.space';
 
 export function getBackendUrl(): string {
+  // For native apps (Capacitor/Android), always use production URL
+  if (isNativeApp()) {
+    console.log('[getBackendUrl] Native app detected, using production URL:', DEFAULT_PRODUCTION_URL);
+    return DEFAULT_PRODUCTION_URL;
+  }
+  
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('API_BASE_URL');
     if (saved && saved.trim()) {
