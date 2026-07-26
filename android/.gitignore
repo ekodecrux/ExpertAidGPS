@@ -101,3 +101,4 @@ app/src/main/assets/capacitor.plugins.json
 app/src/main/res/xml/config.xml
 mipmap-*/ic_launcher*.png
 drawable*/splash.png
+android/app/src/main/res/mipmap-*/
