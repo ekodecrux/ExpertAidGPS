@@ -134,10 +134,17 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
       }
 
       // Set Route details
-      if (res.routes) {
+      if (res.routes && res.routes.length > 0) {
+        console.log('[DriverRoutesView] Routes received:', res.routes.length, 'Looking for routeId:', userData.routeId);
         const matchedRoute = res.routes.find((r: any) => r && r.id === userData.routeId);
         if (matchedRoute) {
+          console.log('[DriverRoutesView] Route matched:', matchedRoute.name);
           setRoute(matchedRoute);
+        } else {
+          console.warn('[DriverRoutesView] No route matched. Showing first available route');
+          if (res.routes.length > 0) {
+            setRoute(res.routes[0]);
+          }
         }
       }
 
