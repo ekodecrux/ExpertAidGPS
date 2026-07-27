@@ -2091,7 +2091,7 @@ async function start() {
         routeRows = rows;
       }
       
-      // Get only route-relevant and role-relevant users (the student/user itself, and any team/drivers matching the route, plus all drivers) to preserve resources
+      // Get only route-relevant users: the driver themselves and users assigned to their route
       let orgUsersRows: any[] = [];
       if (routeId) {
         const [rows] = await conn.query(
@@ -2101,7 +2101,7 @@ async function start() {
         orgUsersRows = rows;
       } else {
         const [rows] = await conn.query(
-          "SELECT * FROM users WHERE orgId = ? AND (uid = ? OR role = 'driver')",
+          "SELECT * FROM users WHERE orgId = ? AND uid = ?",
           [orgId, uid]
         ) as any[];
         orgUsersRows = rows;
