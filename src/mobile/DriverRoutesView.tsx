@@ -4,7 +4,6 @@ import { MapPin, Users, CheckCircle, XCircle, Clock, ChevronRight, User as UserI
 import { doc, onSnapshot, updateDoc, collection, query, where, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { getBackendUrl } from '../lib/apiPatch';
 import { cn, getSectorTerminology, getSortedStops, getLocalAvatar, isValidCoordinate, getUserAvatar } from '../lib/utils';
 import { saveMySQLRecord } from '../lib/mysql';
 import toast from 'react-hot-toast';
@@ -173,8 +172,7 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
       try {
         const token = await auth.currentUser?.getIdToken();
         if (!token) return;
-        const backendUrl = getBackendUrl();
-        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
+        const resObj = await fetch('/api/records/user-data', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
