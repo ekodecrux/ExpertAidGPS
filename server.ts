@@ -2095,7 +2095,7 @@ async function start() {
       let orgUsersRows: any[] = [];
       if (routeId) {
         const [rows] = await conn.query(
-          "SELECT * FROM users WHERE orgId = ? AND (uid = ? OR routeId = ? OR role = 'driver')",
+          "SELECT * FROM users WHERE orgId = ? AND (uid = ? OR routeId = ?)",
           [orgId, uid, routeId]
         ) as any[];
         orgUsersRows = rows;
