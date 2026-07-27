@@ -88,7 +88,7 @@ export default function Login() {
   const currentSector = currentOrg ? `${currentOrg.sector || 'Organization'} Portal` : "Fleet Intelligence Platform";
   
   // Use Instant Experts logo for login screen
-  const expertAidLogoUrl = '/instantexpert-logo.png';
+  const expertAidLogoUrl = '/assets/instantexpert-logo.png';
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
