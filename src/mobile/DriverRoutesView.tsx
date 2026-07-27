@@ -156,8 +156,8 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
       }
 
       // Set Assigned Users (under this route)
-      if (res.users) {
-        const routeUsers = res.users.filter((u: any) => u.routeId === userData.routeId && (u.role === 'user' || u.role === 'member'));
+      if (res.users && route) {
+        const routeUsers = res.users.filter((u: any) => u.routeId === route.id && (u.role === 'user' || u.role === 'member'));
         setAllRouteUsers(routeUsers);
       }
     };
