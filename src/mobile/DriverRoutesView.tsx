@@ -124,7 +124,7 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
 
   // 1. Fetch Comprehensive Driver Route Data from MySQL (decoupled from Firestore)
   useEffect(() => {
-    if (!userData?.orgId || !userData?.routeId) return;
+    if (!userData?.orgId) return;
 
     const processRoutesData = (res: any) => {
       // Set Organization (straight from MySQL)
@@ -192,7 +192,7 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
     const interval = setInterval(fetchMySQLDriverRoutesData, 4000);
 
     return () => clearInterval(interval);
-  }, [userData?.routeId, userData?.orgId, driverData]);
+  }, [userData?.orgId, driverData]);
 
   const getStopUsers = (stopId: string) => {
     return allRouteUsers.filter(u => u.pickupPointId === stopId);
