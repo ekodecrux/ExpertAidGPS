@@ -133,32 +133,35 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
       }
 
       // Set Route details
+      let selectedRoute = null;
       if (res.routes && res.routes.length > 0) {
         console.log('[DriverRoutesView] Routes received:', res.routes.length, 'Looking for routeId:', userData.routeId);
         const matchedRoute = res.routes.find((r: any) => r && r.id === userData.routeId);
         if (matchedRoute) {
           console.log('[DriverRoutesView] Route matched:', matchedRoute.name);
+          selectedRoute = matchedRoute;
           setRoute(matchedRoute);
         } else {
           console.warn('[DriverRoutesView] No route matched. Showing first available route');
           if (res.routes.length > 0) {
+            selectedRoute = res.routes[0];
             setRoute(res.routes[0]);
           }
         }
       }
 
       // Set Active Trip
-      if (res.trips) {
+      if (res.trips && selectedRoute) {
         const matchedTrip = res.trips.find(
-          (t: any) => t && t.routeId === userData.routeId && (t.status === 'live' || t.status === 'ongoing') && t.driverId === (userData?.id || userData?.uid)
+          (t: any) => t && t.routeId === selectedRoute.id && (t.status === 'live' || t.status === 'ongoing') && t.driverId === (userData?.id || userData?.uid)
         );
         setActiveTrip(matchedTrip || null);
       }
 
       // Set Assigned Users (under this route)
-      if (res.users && route) {
-        const routeUsers = res.users.filter((u: any) => u.routeId === route.id && u.role !== 'driver');
-        console.log('[DriverRoutesView] Route users for route', route.id, ':', routeUsers.length, 'users');
+      if (res.users && selectedRoute) {
+        const routeUsers = res.users.filter((u: any) => u.routeId === selectedRoute.id && u.role !== 'driver');
+        console.log('[DriverRoutesView] Route users for route', selectedRoute.id, ':', routeUsers.length, 'users with roles:', routeUsers.map((u: any) => u.role).join(','));
         setAllRouteUsers(routeUsers);
       }
     };
