@@ -87,8 +87,8 @@ export default function Login() {
   const currentName = currentOrg?.name || "Expert GPS Tracking";
   const currentSector = currentOrg ? `${currentOrg.sector || 'Organization'} Portal` : "Fleet Intelligence Platform";
   
-  // Use ExpertAid logo for login screen
-  const expertAidLogoUrl = '/assets/expertaid-logo.png';
+  // Use Instant Experts logo for login screen
+  const expertAidLogoUrl = '/manus-storage/instantexpertsLogo_332929b9.png';
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
