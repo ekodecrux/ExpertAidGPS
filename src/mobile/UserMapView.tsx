@@ -803,7 +803,7 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[2000] bg-slate-900/40 backdrop-blur-sm -m-4 flex flex-col justify-end p-4"
+            className="fixed inset-0 z-[2000] bg-slate-900/40 backdrop-blur-sm flex flex-col justify-end p-0 sm:p-4"
           >
             <motion.div 
               initial={{ y: "100%" }}

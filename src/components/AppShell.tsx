@@ -576,51 +576,72 @@ export default function AppShell({ children }: ShellProps) {
                 <AnimatePresence>
                   {isNotifOpen && (
                     <>
-                      {/* Invisible click-away overlay */}
-                      <div 
-                        className="fixed inset-0 z-[99]" 
+                      {/* Click-away backdrop overlay: darkens backdrop on mobile, transparent click-away on desktop */}
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[9998] bg-slate-900/50 backdrop-blur-xs sm:bg-transparent cursor-pointer" 
                         onClick={() => setIsNotifOpen(false)} 
                       />
                       
                       <motion.div
-                        initial={{ opacity: 0, y: 15, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 12 }}
                         transition={{ duration: 0.15, ease: "easeOut" }}
-                        className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-3xl border border-slate-100 shadow-2xl p-4 z-[100] origin-top-right overflow-hidden focus:outline-none"
+                        className={cn(
+                          "bg-white shadow-2xl border border-slate-100 overflow-hidden focus:outline-none flex flex-col z-[9999]",
+                          // Mobile layout: centered modal card with safe margins on left and right, preventing any cut-off
+                          "fixed left-4 right-4 top-1/2 -translate-y-1/2 max-h-[82vh] rounded-[2rem] p-4 sm:p-5",
+                          // Desktop layout (sm and up): classic dropdown attached directly below the bell icon
+                          "sm:absolute sm:left-auto sm:right-0 sm:top-full sm:translate-y-0 sm:mt-3 sm:w-96 sm:max-h-[32rem] sm:rounded-3xl sm:origin-top-right"
+                        )}
                       >
                         {/* Header */}
-                        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-black text-slate-900 uppercase tracking-tight text-xs italic">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-2 shrink-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-slate-900 uppercase tracking-tight text-xs md:text-sm italic">
                               Notifications
                             </span>
                             {unreadCount > 0 && (
-                              <span className="bg-red-50 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                              <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs">
                                 {unreadCount} new
                               </span>
                             )}
                           </div>
-                          {unreadCount > 0 && (
-                            <button 
-                              onClick={handleMarkAllRead}
-                              className="text-[10px] font-black uppercase tracking-wider text-blue-600 hover:text-blue-700 transition-colors"
+                          <div className="flex items-center gap-1.5">
+                            {unreadCount > 0 && (
+                              <button 
+                                onClick={handleMarkAllRead}
+                                className="text-[10px] font-black uppercase tracking-wider text-blue-600 hover:text-blue-700 transition-colors px-2 py-1 hover:bg-blue-50 rounded-lg"
+                              >
+                                Mark all read
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setIsNotifOpen(false)}
+                              className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors sm:hidden"
+                              title="Close notifications"
+                              aria-label="Close notifications"
                             >
-                              Mark all read
+                              <X className="w-5 h-5" />
                             </button>
-                          )}
+                          </div>
                         </div>
 
                         {/* Notifications List */}
-                        <div className="max-h-80 overflow-y-auto space-y-1.5 pr-0.5 divide-y divide-slate-50">
+                        <div className="overflow-y-auto space-y-1.5 pr-0.5 divide-y divide-slate-50 overscroll-contain flex-1">
                           {generatedNotifications.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-10 text-center">
-                              <Bell className="w-8 h-8 text-slate-200 mb-2 stroke-[1.5]" />
-                              <p className="text-xs font-bold text-slate-400">No route logs yet</p>
-                              <p className="text-[10px] text-slate-300 mt-1">Real-time driver shifts will list here</p>
+                              <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-300 mb-2">
+                                <Bell className="w-6 h-6 stroke-[1.5]" />
+                              </div>
+                              <p className="text-xs font-black text-slate-600 uppercase tracking-wide">No route logs yet</p>
+                              <p className="text-[10px] text-slate-400 mt-1 max-w-[220px]">Real-time driver shift starts and completions will appear here</p>
                             </div>
                           ) : (
-                            generatedNotifications.slice(0, 15).map((n) => {
+                            generatedNotifications.slice(0, 20).map((n) => {
                               const isRead = readIds.includes(n.id);
                               return (
                                 <div 
@@ -629,15 +650,15 @@ export default function AppShell({ children }: ShellProps) {
                                     handleMarkOneRead(n.id);
                                   }}
                                   className={cn(
-                                    "flex gap-3 p-2.5 rounded-2xl transition-all cursor-pointer select-none items-start text-left group mt-1.5 first:mt-0",
-                                    isRead ? "hover:bg-slate-50" : "bg-blue-50/35 hover:bg-blue-50/50"
+                                    "flex gap-3 p-3 rounded-2xl transition-all cursor-pointer select-none items-start text-left group mt-1.5 first:mt-0",
+                                    isRead ? "hover:bg-slate-50 opacity-85" : "bg-blue-50/40 hover:bg-blue-50/60 border border-blue-100/50"
                                   )}
                                 >
                                   <div className={cn(
-                                    "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border mt-0.5",
+                                    "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border mt-0.5 shadow-xs",
                                     n.type === 'start' 
-                                      ? "bg-blue-50 border-blue-100 text-blue-600" 
-                                      : "bg-emerald-50 border-emerald-100 text-emerald-600"
+                                      ? "bg-blue-100/80 border-blue-200 text-blue-600" 
+                                      : "bg-emerald-100/80 border-emerald-200 text-emerald-600"
                                   )}>
                                     {n.type === 'start' ? (
                                       <Bus className="w-4 h-4" />
@@ -648,7 +669,7 @@ export default function AppShell({ children }: ShellProps) {
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between gap-2">
                                       <span className={cn(
-                                        "text-xs font-black uppercase tracking-wider",
+                                        "text-xs font-black uppercase tracking-wider truncate",
                                         n.type === 'start' ? "text-blue-600" : "text-emerald-600"
                                       )}>
                                         {n.type === 'start' ? 'Active Route' : 'Route Completed'}
@@ -658,19 +679,31 @@ export default function AppShell({ children }: ShellProps) {
                                       </span>
                                     </div>
                                     <p className={cn(
-                                      "text-xs leading-relaxed mt-0.5",
+                                      "text-xs leading-relaxed mt-1 break-words",
                                       isRead ? "text-slate-500 font-medium" : "text-slate-800 font-bold"
                                     )}>
                                       {n.message}
                                     </p>
                                   </div>
                                   {!isRead && (
-                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-2 self-center animate-pulse" />
+                                    <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-2 self-center animate-pulse" />
                                   )}
                                 </div>
                               );
                             })
                           )}
+                        </div>
+
+                        {/* Mobile Bottom Bar for Easy Dismissal */}
+                        <div className="pt-3 border-t border-slate-100 mt-2 flex sm:hidden items-center justify-between text-slate-400 text-[10px] font-bold shrink-0">
+                          <span>Live Driver & Route Activity</span>
+                          <button 
+                            type="button"
+                            onClick={() => setIsNotifOpen(false)}
+                            className="text-blue-600 font-black uppercase tracking-wider hover:underline"
+                          >
+                            Close
+                          </button>
                         </div>
                       </motion.div>
                     </>
