@@ -7,7 +7,6 @@ coverage/
 *.log
 .env*
 !.env.example
-android/app/src/main/assets/public/
 firebase-service-account.json
 *.keystore
 *.jks
