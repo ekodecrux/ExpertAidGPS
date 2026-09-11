@@ -9,7 +9,7 @@ import { db, auth, auth as firebaseAuth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { isValidCoordinate, cn, getLocalAvatar, getUserAvatar } from '../lib/utils';
-import { watchLocation, hasAcceptedLocationDisclosure, setLocationDisclosureAccepted, requestLocationPermissions } from '../lib/locationService';
+import { watchLocation, hasAcceptedLocationDisclosure, setLocationDisclosureAccepted, requestLocationPermissions, checkIsLocationPermissionGranted } from '../lib/locationService';
 import LocationDisclosureModal from '../components/LocationDisclosureModal';
 import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 import { motion, AnimatePresence } from 'motion/react';
@@ -173,7 +173,13 @@ export default function DriverApp() {
 
     // Check prominent disclosure consent per Google Play Policy
     if (!hasAcceptedLocationDisclosure()) {
-      setShowDisclosureModal(true);
+      checkIsLocationPermissionGranted().then((alreadyGranted) => {
+        if (!alreadyGranted) {
+          setShowDisclosureModal(true);
+        } else {
+          setDisclosureAcceptedTrigger(prev => prev + 1);
+        }
+      });
       return;
     }
 

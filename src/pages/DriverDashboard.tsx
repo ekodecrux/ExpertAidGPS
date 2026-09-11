@@ -27,7 +27,7 @@ import MapComponent, {
   Polyline,
 } from "../components/MapComponent";
 import { useAuth } from "../contexts/AuthContext";
-import { watchLocation, hasAcceptedLocationDisclosure, setLocationDisclosureAccepted, requestLocationPermissions } from "../lib/locationService";
+import { watchLocation, hasAcceptedLocationDisclosure, setLocationDisclosureAccepted, requestLocationPermissions, checkIsLocationPermissionGranted } from "../lib/locationService";
 import LocationDisclosureModal from "../components/LocationDisclosureModal";
 import {
   doc,
@@ -736,7 +736,8 @@ export default function DriverDashboard({
         }
       } else {
         // START TRIP
-        if (!hasAcceptedLocationDisclosure()) {
+        const isPermGranted = await checkIsLocationPermissionGranted();
+        if (!hasAcceptedLocationDisclosure() && !isPermGranted) {
           setShowDisclosureModal(true);
           return;
         }

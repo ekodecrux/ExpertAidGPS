@@ -5,16 +5,48 @@ export const LOCATION_DISCLOSURE_KEY = 'expert_gps_location_disclosure_accepted'
 
 export function hasAcceptedLocationDisclosure(): boolean {
   if (typeof window === 'undefined') return false;
-  return localStorage.getItem(LOCATION_DISCLOSURE_KEY) === 'true';
+  try {
+    if (localStorage.getItem(LOCATION_DISCLOSURE_KEY) === 'true') return true;
+    if (sessionStorage.getItem(LOCATION_DISCLOSURE_KEY) === 'true') return true;
+    if (document.cookie && document.cookie.includes(`${LOCATION_DISCLOSURE_KEY}=true`)) return true;
+  } catch (e) {}
+  return false;
 }
 
 export function setLocationDisclosureAccepted(accepted: boolean): void {
   if (typeof window === 'undefined') return;
-  if (accepted) {
-    localStorage.setItem(LOCATION_DISCLOSURE_KEY, 'true');
-  } else {
-    localStorage.removeItem(LOCATION_DISCLOSURE_KEY);
-  }
+  try {
+    if (accepted) {
+      localStorage.setItem(LOCATION_DISCLOSURE_KEY, 'true');
+      sessionStorage.setItem(LOCATION_DISCLOSURE_KEY, 'true');
+      document.cookie = `${LOCATION_DISCLOSURE_KEY}=true; path=/; max-age=31536000; SameSite=Lax`;
+    } else {
+      localStorage.removeItem(LOCATION_DISCLOSURE_KEY);
+      sessionStorage.removeItem(LOCATION_DISCLOSURE_KEY);
+      document.cookie = `${LOCATION_DISCLOSURE_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    }
+  } catch (e) {}
+}
+
+export async function checkIsLocationPermissionGranted(): Promise<boolean> {
+  if (hasAcceptedLocationDisclosure()) return true;
+  try {
+    if (isNativeApp()) {
+      const status: PermissionStatus = await Geolocation.checkPermissions();
+      if (status.location === 'granted' || status.coarseLocation === 'granted') {
+        setLocationDisclosureAccepted(true);
+        return true;
+      }
+    }
+    if (typeof navigator !== 'undefined' && 'permissions' in navigator && navigator.permissions.query) {
+      const res = await navigator.permissions.query({ name: 'geolocation' as any });
+      if (res.state === 'granted') {
+        setLocationDisclosureAccepted(true);
+        return true;
+      }
+    }
+  } catch (e) {}
+  return hasAcceptedLocationDisclosure();
 }
 
 export async function requestLocationPermissions(): Promise<boolean> {
@@ -24,8 +56,13 @@ export async function requestLocationPermissions(): Promise<boolean> {
         const status: PermissionStatus = await Geolocation.checkPermissions();
         if (status.location !== 'granted' && status.coarseLocation !== 'granted') {
           const req = await Geolocation.requestPermissions();
-          return req.location === 'granted' || req.coarseLocation === 'granted';
+          const granted = req.location === 'granted' || req.coarseLocation === 'granted';
+          if (granted) {
+            setLocationDisclosureAccepted(true);
+          }
+          return granted;
         }
+        setLocationDisclosureAccepted(true);
         return true;
       } catch (e) {
         console.warn('Capacitor checkPermissions error, falling back to navigator permissions:', e);
@@ -35,7 +72,11 @@ export async function requestLocationPermissions(): Promise<boolean> {
     if ('permissions' in navigator && navigator.permissions.query) {
       try {
         const res = await navigator.permissions.query({ name: 'geolocation' as any });
-        if (res.state === 'prompt' || res.state === 'granted') {
+        if (res.state === 'granted') {
+          setLocationDisclosureAccepted(true);
+          return true;
+        }
+        if (res.state === 'prompt') {
           return true;
         }
       } catch (e) {
