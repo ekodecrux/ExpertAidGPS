@@ -204,6 +204,46 @@ function ChangeView({ center, zoom, bounds }: { center: { lat: number; lng: numb
   return null;
 }
 
+// Tile layers without watermark requirements.
+// By default, uses OpenStreetMap Standard & Humanitarian tiles (clean, global, no watermark, fast CDN).
+// Also provides satellite aerial imagery via Esri World Imagery.
+// If a user configures VITE_CARTO_API_KEY, CARTO raster tiles will include their key parameter.
+const cartoKey = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CARTO_API_KEY) || '';
+
+export const MAP_LAYERS = {
+  standard: {
+    name: 'Standard',
+    url: cartoKey 
+      ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${cartoKey}`
+      : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: cartoKey 
+      ? '&copy; <a href="https://carto.com/attributions">CARTO</a>, &copy; <a href="https://openstreetmap.org">OSM</a>'
+      : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    subdomains: ['a', 'b', 'c'] as string[],
+    maxZoom: 19
+  },
+  bright: {
+    name: 'Vibrant',
+    url: cartoKey 
+      ? `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${cartoKey}`
+      : "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+    attribution: cartoKey 
+      ? '&copy; <a href="https://carto.com/attributions">CARTO</a>, &copy; <a href="https://openstreetmap.org">OSM</a>'
+      : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Tiles style by <a href="https://www.hotosm.org/">HOT</a>',
+    subdomains: ['a', 'b', 'c'] as string[],
+    maxZoom: 19
+  },
+  satellite: {
+    name: 'Satellite',
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, Maxar',
+    subdomains: [] as string[],
+    maxZoom: 19
+  }
+};
+
+export type MapLayerType = 'standard' | 'bright' | 'satellite';
+
 function CustomControls({ 
   hideMapStyles = false, 
   position = 'top-right',
@@ -216,7 +256,7 @@ function CustomControls({
   targetStopCoords?: { lat: number; lng: number } | null;
 }) {
   const map = useMap();
-  const [mapType, setMapType] = useState<'voyager' | 'positron' | 'dark'>('voyager');
+  const [mapType, setMapType] = useState<MapLayerType>('standard');
 
   const controlCallback = React.useCallback((node: HTMLDivElement | null) => {
     if (node) {
@@ -262,17 +302,16 @@ function CustomControls({
     }
   };
 
-  const layers = {
-    voyager: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-    positron: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-  };
+  const currentLayer = MAP_LAYERS[mapType] || MAP_LAYERS.standard;
 
   return (
     <>
       <TileLayer
-        attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>, &copy; <a href="https://openstreetmap.org">OSM</a>'
-        url={layers[mapType]}
+        key={mapType}
+        attribution={currentLayer.attribution}
+        url={currentLayer.url}
+        subdomains={currentLayer.subdomains.length > 0 ? currentLayer.subdomains : undefined}
+        maxZoom={currentLayer.maxZoom}
       />
       
       <div 
@@ -316,11 +355,11 @@ function CustomControls({
             type="button"
             onClick={(e) => { 
               e.stopPropagation(); 
-              const nextType = mapType === 'voyager' ? 'positron' : mapType === 'positron' ? 'dark' : 'voyager';
+              const nextType: MapLayerType = mapType === 'standard' ? 'bright' : mapType === 'bright' ? 'satellite' : 'standard';
               setMapType(nextType);
             }}
             className="w-11 h-11 bg-white rounded-full shadow-xl border border-slate-200 flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all active:scale-95"
-            title="Cycle Map Style (Voyager / Positron / Dark)"
+            title={`Cycle Map Style: currently ${currentLayer.name} (Standard / Vibrant / Satellite)`}
           >
             <Layers className="w-5 h-5" />
           </button>
@@ -438,8 +477,10 @@ export default function MapComponent({
         )}
         {hideControls && (
           <TileLayer
-            attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>, &copy; <a href="https://openstreetmap.org">OSM</a>'
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            attribution={MAP_LAYERS.standard.attribution}
+            url={MAP_LAYERS.standard.url}
+            subdomains={MAP_LAYERS.standard.subdomains.length > 0 ? MAP_LAYERS.standard.subdomains : undefined}
+            maxZoom={MAP_LAYERS.standard.maxZoom}
           />
         )}
         <MapReadyTrigger onMapReady={onMapReady} />
