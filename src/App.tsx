@@ -6,16 +6,22 @@ import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import OrgAdminDashboard from './pages/OrgAdminDashboard';
 import DriverDashboard from './pages/DriverDashboard';
 import UserDashboard from './pages/UserDashboard';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import { Toaster } from 'react-hot-toast';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 import DriverApp from './mobile/DriverApp';
 import UserApp from './mobile/UserApp';
 
 function AppContent() {
   const { userData, loading } = useAuth();
+  const location = useLocation();
   
   const isMobileRole = userData?.role === 'driver' || userData?.role === 'user';
+
+  if (location.pathname === '/privacy-policy') {
+    return <PrivacyPolicy />;
+  }
 
   if (loading) {
     return (

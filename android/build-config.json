@@ -2,12 +2,12 @@
   "app": {
     "name": "Expert GPS Tracking",
     "packageName": "com.expertaid.gpstracking",
-    "version": "1.0.0",
-    "versionCode": 1,
+    "version": "1.0.1",
+    "versionCode": 2,
     "description": "Complete fleet management and student tracking system with real-time GPS tracking, route management, and notifications.",
     "minSdkVersion": 24,
-    "targetSdkVersion": 34,
-    "compileSdkVersion": 34
+    "targetSdkVersion": 36,
+    "compileSdkVersion": 36
   },
   "playStore": {
     "category": "TRAVEL_AND_LOCAL",

@@ -43,6 +43,24 @@ export default function DriverApp() {
   };
   const [driverDataLoading, setDriverDataLoading] = useState<boolean>(!driverData);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const locationConsentKey = `expert_gps_background_location_consent_${userData?.id || userData?.uid || 'driver'}`;
+  const [locationConsentAccepted, setLocationConsentAccepted] = useState<boolean>(() => {
+    try {
+      const currentUserId = userData?.id || userData?.uid;
+      return currentUserId ? localStorage.getItem(`expert_gps_background_location_consent_${currentUserId}`) === 'accepted' : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const acceptLocationDisclosure = () => {
+    try {
+      localStorage.setItem(locationConsentKey, 'accepted');
+    } catch (error) {
+      console.warn('[LocationDisclosure] Could not persist consent locally:', error);
+    }
+    setLocationConsentAccepted(true);
+  };
 
   useEffect(() => {
     if (userData?.orgId) {
@@ -154,6 +172,10 @@ export default function DriverApp() {
 
   // 3. Track and Update Driver's Live Location (Persistent across tabs)
   useEffect(() => {
+    // Never start geolocation before the in-app prominent disclosure has been accepted.
+    // This gate must run before navigator.geolocation.watchPosition can trigger Android permission UI.
+    if (!locationConsentAccepted) return;
+
     const trackingVehicleId = assignedVehicleId || userData?.vehicleId || activeTrip?.vehicleId || 'DEV-V1';
     if (!trackingVehicleId) return;
 
@@ -210,7 +232,7 @@ export default function DriverApp() {
         navigator.geolocation.clearWatch(localWatchId);
       }
     };
-  }, [assignedVehicleId, userData?.vehicleId, activeTrip?.vehicleId]);
+  }, [assignedVehicleId, userData?.vehicleId, activeTrip?.vehicleId, locationConsentAccepted]);
 
   const handleStopTrip = async () => {
     if (!activeTrip) return;
@@ -388,6 +410,7 @@ export default function DriverApp() {
             driverDataLoading={driverDataLoading}
             activeTrip={activeTrip}
             setActiveTrip={setActiveTrip}
+            locationConsentAccepted={locationConsentAccepted}
           />
         );
       case 'routes':
@@ -516,19 +539,72 @@ export default function DriverApp() {
             driverDataLoading={driverDataLoading}
             activeTrip={activeTrip}
             setActiveTrip={setActiveTrip}
+            locationConsentAccepted={locationConsentAccepted}
           />
         );
     }
   };
 
   return (
-    <MobileLayout 
-      activeTab={activeTab} 
-      onTabChange={setActiveTab} 
-      tabs={tabs}
-      headerRight={headerRight}
-    >
-      {renderContent()}
-    </MobileLayout>
+    <>
+      <MobileLayout 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab} 
+        tabs={tabs}
+        headerRight={headerRight}
+      >
+        {renderContent()}
+      </MobileLayout>
+
+      {!locationConsentAccepted && userData && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 px-5 py-8 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="location-disclosure-title"
+            className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl"
+          >
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/25">
+                <Navigation size={22} />
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-600">Driver safety feature</p>
+                <h2 id="location-disclosure-title" className="text-xl font-black uppercase italic tracking-tight text-slate-900">Location access</h2>
+              </div>
+            </div>
+
+            <p className="text-sm font-semibold leading-6 text-slate-700">
+              Expert GPS Tracking collects your device location while Driver Tracking is active so your assigned vehicle can be shown on the live route map and your organization can keep an active trip updated for authorized users.
+            </p>
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              Location is used only for driver trip tracking and is transmitted to Expert GPS Tracking servers for your organization. Tracking begins only after you choose <strong>Allow location access</strong>, runs while the driver tracking experience is active, and can be stopped by ending the trip or disabling location permission in Android settings.
+            </p>
+
+            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-[10px] font-bold leading-4 text-blue-900">
+              Please read this disclosure before the Android location permission prompt appears. Your choice is required to use live driver tracking.
+              <a href="/privacy-policy" target="_blank" rel="noreferrer" className="mt-1 block font-black underline">Read the full Privacy Policy</a>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => toast.error('Location access is required to use live driver tracking.')}
+                className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 active:scale-95"
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                onClick={acceptLocationDisclosure}
+                className="flex-1 rounded-2xl bg-blue-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-600/25 active:scale-95"
+              >
+                Allow location access
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
