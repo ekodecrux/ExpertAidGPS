@@ -11,10 +11,17 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import DriverApp from './mobile/DriverApp';
 import UserApp from './mobile/UserApp';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 
 function AppContent() {
   const { userData, loading } = useAuth();
   
+  // Public route for Google Play Policy compliance: allow reviewing privacy policy without login
+  const path = window.location.pathname.toLowerCase();
+  if (path === '/privacy' || path === '/privacy-policy' || path === '/location-disclosure') {
+    return <PrivacyPolicyPage />;
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">

@@ -3,10 +3,13 @@ import MobileLayout from '../components/MobileLayout';
 import UserDashboard from '../pages/UserDashboard';
 import UserMapView from './UserMapView';
 import UserRoutesView from './UserRoutesView';
-import { Home, Compass, Bell, User, MapPin, Bus, Clock, Mail, Phone, Shield, Key, Camera, CheckCircle, ChevronRight, LogOut, Navigation, X, XCircle } from 'lucide-react';
+import { Home, Compass, Bell, User, MapPin, Bus, Clock, Mail, Phone, Shield, Key, Camera, CheckCircle, ChevronRight, LogOut, Navigation, X, XCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import { cn, getLocalAvatar, getUserAvatar, cleanMessage, getNotifications } from '../lib/utils';
+import LocationDisclosureModal from '../components/LocationDisclosureModal';
+import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
+import { setLocationDisclosureAccepted } from '../lib/locationService';
 
 import { doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
@@ -19,6 +22,8 @@ export default function UserApp() {
   const [routeName, setRouteName] = useState<string>('');
   const [stopName, setStopName] = useState<string>('');
   const [updatingPhoto, setUpdatingPhoto] = useState(false);
+  const [showLocationDisclosure, setShowLocationDisclosure] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [userDbData, setUserDbData] = useState<any>(() => {
     if (!userData?.uid) return null;
     try {
@@ -500,7 +505,43 @@ export default function UserApp() {
               </div>
 
               <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Security & Access</h4>
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Location &amp; Privacy</h4>
+                
+                <button 
+                  onClick={() => setShowLocationDisclosure(true)}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-blue-50/70 border border-blue-100 text-blue-900 group transition-all active:scale-95 text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                      <MapPin size={18} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-widest block">Location Disclosure</span>
+                      <span className="text-[9px] text-blue-600 font-bold">Google Play tracking &amp; consent</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-blue-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button 
+                  onClick={() => setShowPrivacyModal(true)}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 text-slate-800 group transition-all active:scale-95 text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-slate-600">
+                      <ShieldCheck size={18} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-widest block">Privacy Policy</span>
+                      <span className="text-[9px] text-slate-400 font-bold">Data handling and security</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+
+              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Security &amp; Access</h4>
                 
                 <button 
                   onClick={handlePasswordReset}
@@ -537,12 +578,30 @@ export default function UserApp() {
   };
 
   return (
-    <MobileLayout 
-      activeTab={activeTab} 
-      onTabChange={setActiveTab} 
-      tabs={tabs}
-    >
-      {renderContent()}
-    </MobileLayout>
+    <>
+      <MobileLayout 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab} 
+        tabs={tabs}
+      >
+        {renderContent()}
+      </MobileLayout>
+
+      <LocationDisclosureModal
+        isOpen={showLocationDisclosure}
+        onAccept={() => {
+          setLocationDisclosureAccepted(true);
+          setShowLocationDisclosure(false);
+          toast.success('Location permission accepted');
+        }}
+        onDeny={() => setShowLocationDisclosure(false)}
+        requiredForRole="user"
+      />
+
+      <PrivacyPolicyModal
+        isOpen={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+      />
+    </>
   );
 }

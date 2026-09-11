@@ -110,10 +110,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         try {
           if (!token) {
-            token = await currentUser.getIdToken(true);
+            token = await currentUser.getIdToken(false);
           }
-          const backendUrl = getBackendUrl();
-          const response = await fetch(`${backendUrl}/api/auth/verify-user`, {
+          const response = await fetch('/api/auth/verify-user', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -124,15 +123,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!response.ok) {
             const errResult = await response.json().catch(() => ({ error: 'Verification failed' }));
             console.warn("User verification check failed:", errResult.error);
-            setUserData(null);
-            setUser(null);
-            localStorage.removeItem("expert_gps_fallback_token");
-            localStorage.removeItem("expert_gps_fallback_user");
-            if (auth.currentUser) {
-              await signOut(auth).catch(() => {});
-            }
-            if (!isSigningIn) {
-              toast.error(errResult.error || "Access Denied.");
+            if (response.status === 401 || response.status === 403 || response.status === 404) {
+              setUserData(null);
+              setUser(null);
+              localStorage.removeItem("expert_gps_fallback_token");
+              localStorage.removeItem("expert_gps_fallback_user");
+              if (auth.currentUser) {
+                await signOut(auth).catch(() => {});
+              }
+              if (!isSigningIn) {
+                toast.error(errResult.error || "Access Denied.");
+              }
             }
             setLoading(false);
             return;
@@ -157,39 +158,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setLoading(false);
         } catch (error: any) {
-          console.error("Error verifying user session:", error);
-          const isSignin = sessionStorage.getItem('is_signing_in') === 'true';
-          const cachedDataStr = localStorage.getItem(`expert_gps_user_${currentUser.uid}`);
+          console.warn("Network notice during user session verification (retaining offline session):", error);
+          const cachedDataStr = localStorage.getItem(`expert_gps_user_${currentUser.uid}`) || localStorage.getItem("expert_gps_fallback_user");
           if (cachedDataStr) {
             try {
               const cachedUserData = JSON.parse(cachedDataStr);
               setUserData(cachedUserData);
-              if (!isSignin) {
-                toast.success("Using local session (Server/Network glitch recovered)");
-              }
-            } catch (err) {
-              setUserData(null);
-              setUser(null);
-              localStorage.removeItem("expert_gps_fallback_token");
-              localStorage.removeItem("expert_gps_fallback_user");
-              if (auth.currentUser) {
-                await signOut(auth).catch(() => {});
-              }
-              if (!isSignin) {
-                toast.error("Session verification failed.");
-              }
-            }
-          } else {
-            setUserData(null);
-            setUser(null);
-            localStorage.removeItem("expert_gps_fallback_token");
-            localStorage.removeItem("expert_gps_fallback_user");
-            if (auth.currentUser) {
-              await signOut(auth).catch(() => {});
-            }
-            if (!isSignin) {
-              toast.error("Session verification failed.");
-            }
+            } catch (err) {}
           }
           setLoading(false);
         }
@@ -206,10 +181,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    // Periodic polling to keep user data, status, and notifications perfectly live & synchronous!
+    // Periodic polling to keep user data live and synchronous
     const interval = setInterval(() => {
       refreshUserData();
-    }, 3000);
+    }, 10000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -266,9 +241,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Custom Express local authentication POST directly to MySQL
       const backendUrl = getBackendUrl();
-      console.log('[LOGIN] Backend URL:', backendUrl);
-      console.log('[LOGIN] Attempting login with email:', email);
-      
       const loginRes = await fetch(`${backendUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
@@ -277,26 +249,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password: pass })
       });
 
-      console.log('[LOGIN] Response status:', loginRes.status);
-      console.log('[LOGIN] Response headers:', Object.fromEntries(loginRes.headers.entries()));
-      
       if (!loginRes.ok) {
         let errorResult: any = { error: 'Authentication failed.' };
         try {
           const contentType = loginRes.headers.get('content-type');
           const responseText = await loginRes.text();
-          console.log('[LOGIN] Error response (first 500 chars):', responseText.substring(0, 500));
-          console.log('[LOGIN] Content-Type:', contentType);
-          
           if (contentType && contentType.includes('application/json')) {
             try {
               errorResult = JSON.parse(responseText);
-            } catch (e) {
+            } catch {
               errorResult = { error: responseText };
             }
           } else {
             if (responseText.includes('<!doctype') || responseText.includes('<html')) {
-              console.error('[LOGIN] Got HTML response - backend may be down');
               throw new Error('Backend server error: The backend API is not responding correctly. Please ensure the backend service is running.');
             }
             errorResult = { error: responseText || 'Authentication failed.' };
@@ -320,12 +285,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (text.includes('<!doctype') || text.includes('<html')) {
             throw new Error('Backend server error: The backend API is not responding correctly. Please ensure the backend service is running.');
           }
-          throw new Error('Backend returned non-JSON response. Backend API may not be configured correctly.');
+          throw new Error('Backend returned non-JSON response.');
         }
       } catch (parseErr: any) {
         throw new Error(parseErr.message || 'Failed to parse backend response.');
       }
-      
+
       if (!loginResult.success) {
         throw new Error(loginResult.error || "Failed to authenticate.");
       }
@@ -351,10 +316,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserData(apiUserData);
       localStorage.setItem(`expert_gps_user_${resUser.uid}`, JSON.stringify(apiUserData));
       setLoading(false);
-      console.log('[LOGIN] Success! User logged in:', resUser.email);
     } catch (err: any) {
-      console.error('[LOGIN] Error:', err.message);
-      console.error('[LOGIN] Full error:', err);
       setUser(null);
       setUserData(null);
       localStorage.removeItem("expert_gps_fallback_token");
@@ -404,7 +366,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUserData = async () => {
     if (!user) return;
     try {
-      const token = await user.getIdToken(true);
+      const token = await user.getIdToken(false);
       const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/api/auth/verify-user`, {
         method: 'POST',

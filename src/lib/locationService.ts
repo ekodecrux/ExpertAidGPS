@@ -1,6 +1,22 @@
 import { Geolocation, PermissionStatus } from '@capacitor/geolocation';
 import { isNativeApp } from './apiPatch';
 
+export const LOCATION_DISCLOSURE_KEY = 'expert_gps_location_disclosure_accepted';
+
+export function hasAcceptedLocationDisclosure(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(LOCATION_DISCLOSURE_KEY) === 'true';
+}
+
+export function setLocationDisclosureAccepted(accepted: boolean): void {
+  if (typeof window === 'undefined') return;
+  if (accepted) {
+    localStorage.setItem(LOCATION_DISCLOSURE_KEY, 'true');
+  } else {
+    localStorage.removeItem(LOCATION_DISCLOSURE_KEY);
+  }
+}
+
 export async function requestLocationPermissions(): Promise<boolean> {
   try {
     if (isNativeApp()) {

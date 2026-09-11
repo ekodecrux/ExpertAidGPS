@@ -7,6 +7,9 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
 import { getLocalIcon } from '../lib/utils';
 import { getBackendUrl, setBackendUrl } from '../lib/apiPatch';
+import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
+import LocationDisclosureModal from '../components/LocationDisclosureModal';
+import { hasAcceptedLocationDisclosure, setLocationDisclosureAccepted } from '../lib/locationService';
 
 export default function Login() {
   const { login, loginEmail } = useAuth();
@@ -19,6 +22,8 @@ export default function Login() {
   const [resetEmail, setResetEmail] = useState('');
   const [showServerConfig, setShowServerConfig] = useState(false);
   const [serverUrlInput, setServerUrlInput] = useState(getBackendUrl());
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showLocationDisclosure, setShowLocationDisclosure] = useState(false);
 
   const [orgs, setOrgs] = useState<any[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
@@ -311,9 +316,45 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Server Config Hidden from Users */}
+          {/* Privacy & Location Disclosure Links (Compliant with Google Play Store Policies) */}
+          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-center gap-3 text-[11px] text-slate-500 font-medium">
+            <button
+              type="button"
+              onClick={() => setShowPrivacyPolicy(true)}
+              className="hover:text-blue-600 transition-colors underline underline-offset-2 cursor-pointer"
+            >
+              Privacy Policy
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              type="button"
+              onClick={() => setShowLocationDisclosure(true)}
+              className="hover:text-blue-600 transition-colors underline underline-offset-2 cursor-pointer text-center"
+            >
+              Location &amp; Background Disclosure
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Prominent Location Disclosure Modal */}
+      <LocationDisclosureModal
+        isOpen={showLocationDisclosure}
+        onAccept={() => {
+          setLocationDisclosureAccepted(true);
+          setShowLocationDisclosure(false);
+          toast.success('Location permission disclosure accepted');
+        }}
+        onDeny={() => {
+          setShowLocationDisclosure(false);
+        }}
+      />
+
+      {/* Full Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        isOpen={showPrivacyPolicy}
+        onClose={() => setShowPrivacyPolicy(false)}
+      />
 
       {/* Server Config Modal */}
       <AnimatePresence>

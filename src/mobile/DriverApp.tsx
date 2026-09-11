@@ -3,13 +3,15 @@ import MobileLayout from '../components/MobileLayout';
 import DriverDashboard from '../pages/DriverDashboard';
 import DriverRoutesView from './DriverRoutesView';
 import DriverMapView from './DriverMapView';
-import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight } from 'lucide-react';
+import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight, MapPin, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, auth, auth as firebaseAuth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { isValidCoordinate, cn, getLocalAvatar, getUserAvatar } from '../lib/utils';
-import { watchLocation } from '../lib/locationService';
+import { watchLocation, hasAcceptedLocationDisclosure, setLocationDisclosureAccepted, requestLocationPermissions } from '../lib/locationService';
+import LocationDisclosureModal from '../components/LocationDisclosureModal';
+import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { saveMySQLRecord } from '../lib/mysql';
@@ -21,6 +23,9 @@ export default function DriverApp() {
   const [isSelectingRoute, setIsSelectingRoute] = useState(false);
   const [orgName, setOrgName] = useState<string>('');
   const [assignedVehicleId, setAssignedVehicleId] = useState<string>('DEV-V1');
+  const [showDisclosureModal, setShowDisclosureModal] = useState<boolean>(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState<boolean>(false);
+  const [disclosureAcceptedTrigger, setDisclosureAcceptedTrigger] = useState<number>(0);
   const [driverData, _setDriverData] = useState<any>(() => {
     if (!userData) return null;
     try {
@@ -166,6 +171,12 @@ export default function DriverApp() {
     const trackingVehicleId = assignedVehicleId || userData?.vehicleId || activeTrip?.vehicleId || 'DEV-V1';
     if (!trackingVehicleId) return;
 
+    // Check prominent disclosure consent per Google Play Policy
+    if (!hasAcceptedLocationDisclosure()) {
+      setShowDisclosureModal(true);
+      return;
+    }
+
     let cleanupWatch: (() => void) | null = null;
 
     watchLocation(
@@ -213,7 +224,20 @@ export default function DriverApp() {
         cleanupWatch();
       }
     };
-  }, [assignedVehicleId, userData?.vehicleId, activeTrip?.vehicleId]);
+  }, [assignedVehicleId, userData?.vehicleId, activeTrip?.vehicleId, disclosureAcceptedTrigger]);
+
+  const handleAcceptLocationDisclosure = async () => {
+    setLocationDisclosureAccepted(true);
+    setShowDisclosureModal(false);
+    setDisclosureAcceptedTrigger(prev => prev + 1);
+    toast.success('Location tracking enabled for active shifts');
+    await requestLocationPermissions().catch(() => {});
+  };
+
+  const handleDenyLocationDisclosure = () => {
+    setShowDisclosureModal(false);
+    toast.error('Location tracking paused. Enable location when starting your route.');
+  };
 
   const handleStopTrip = async () => {
     if (!activeTrip) return;
@@ -483,6 +507,42 @@ export default function DriverApp() {
               </div>
 
               <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-50 space-y-4">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 mb-4">Location &amp; Privacy</h3>
+                
+                <button 
+                  onClick={() => setShowDisclosureModal(true)}
+                  className="w-full flex items-center justify-between p-4 bg-blue-50/70 border border-blue-100 rounded-2xl text-blue-700 active:scale-95 transition-all text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                      <MapPin size={17} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Location Disclosure</p>
+                      <p className="text-[9px] text-blue-600/80 font-bold mt-0.5">Google Play background tracking notice</p>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-blue-400" />
+                </button>
+
+                <button 
+                  onClick={() => setShowPrivacyModal(true)}
+                  className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 active:scale-95 transition-all text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-slate-200/70 flex items-center justify-center text-slate-600">
+                      <ShieldCheck size={17} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Privacy Policy</p>
+                      <p className="text-[9px] text-slate-400 font-bold mt-0.5">User data &amp; security terms</p>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-slate-400" />
+                </button>
+              </div>
+
+              <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-50 space-y-4">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 mb-4">Account Security</h3>
                 
                 <button 
@@ -525,13 +585,29 @@ export default function DriverApp() {
   };
 
   return (
-    <MobileLayout 
-      activeTab={activeTab} 
-      onTabChange={setActiveTab} 
-      tabs={tabs}
-      headerRight={headerRight}
-    >
-      {renderContent()}
-    </MobileLayout>
+    <>
+      <MobileLayout 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab} 
+        tabs={tabs}
+        headerRight={headerRight}
+      >
+        {renderContent()}
+      </MobileLayout>
+
+      {/* Prominent Location Disclosure Modal (Google Play Policy Compliant) */}
+      <LocationDisclosureModal
+        isOpen={showDisclosureModal}
+        onAccept={handleAcceptLocationDisclosure}
+        onDeny={handleDenyLocationDisclosure}
+        requiredForRole="driver"
+      />
+
+      {/* Full Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        isOpen={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+      />
+    </>
   );
 }

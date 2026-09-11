@@ -27,7 +27,8 @@ import MapComponent, {
   Polyline,
 } from "../components/MapComponent";
 import { useAuth } from "../contexts/AuthContext";
-import { watchLocation } from "../lib/locationService";
+import { watchLocation, hasAcceptedLocationDisclosure, setLocationDisclosureAccepted, requestLocationPermissions } from "../lib/locationService";
+import LocationDisclosureModal from "../components/LocationDisclosureModal";
 import {
   doc,
   onSnapshot,
@@ -86,6 +87,7 @@ export default function DriverDashboard({
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [showDisclosureModal, setShowDisclosureModal] = useState<boolean>(false);
   const [historyTrips, setHistoryTrips] = useState<any[]>([]);
   const [startDate, setStartDate] = useState(
     new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
@@ -734,6 +736,11 @@ export default function DriverDashboard({
         }
       } else {
         // START TRIP
+        if (!hasAcceptedLocationDisclosure()) {
+          setShowDisclosureModal(true);
+          return;
+        }
+
         if (!route || !vehicle) {
           return toast.error("Route/Vehicle configuration missing", { id: 'trip-toggle-err' });
         }
@@ -1951,6 +1958,22 @@ export default function DriverDashboard({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <LocationDisclosureModal
+        isOpen={showDisclosureModal}
+        onAccept={async () => {
+          setLocationDisclosureAccepted(true);
+          setShowDisclosureModal(false);
+          toast.success("Location disclosure accepted");
+          await requestLocationPermissions().catch(() => {});
+          toggleTrip();
+        }}
+        onDeny={() => {
+          setShowDisclosureModal(false);
+          toast.error("Location tracking paused. Permission required to start trip.");
+        }}
+        requiredForRole="driver"
+      />
     </div>
   );
 }

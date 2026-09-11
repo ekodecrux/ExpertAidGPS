@@ -1,4 +1,4 @@
-package com.expertgpstracking.app;
+package com.expertaid.gpstracking;
 
 import com.getcapacitor.BridgeActivity;
 

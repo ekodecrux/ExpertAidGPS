@@ -4,10 +4,16 @@ import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
+const customDbId = (firebaseConfig.firestoreDatabaseId &&
+  firebaseConfig.firestoreDatabaseId !== 'remixed-firestore-database-id' &&
+  firebaseConfig.firestoreDatabaseId !== '(default)')
+  ? firebaseConfig.firestoreDatabaseId
+  : undefined;
+
 // Using initializeFirestore with experimentalForceLongPolling to improve stability in containerized environments
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-}, firebaseConfig.firestoreDatabaseId);
+export const db = customDbId
+  ? initializeFirestore(app, { experimentalForceLongPolling: true }, customDbId)
+  : initializeFirestore(app, { experimentalForceLongPolling: true });
 
 const rawAuth = initializeAuth(app, {
   persistence: indexedDBLocalPersistence,

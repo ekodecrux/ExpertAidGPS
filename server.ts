@@ -142,7 +142,13 @@ async function start() {
 
   // Initialize Firebase Firestore and Auth references safely to prevent startup crash on quota or credential issues
   try {
-    firestoreDb = firebaseConfig.firestoreDatabaseId ? getFirestore(undefined, firebaseConfig.firestoreDatabaseId) : getFirestore();
+    const customDbId = (firebaseConfig.firestoreDatabaseId &&
+      firebaseConfig.firestoreDatabaseId !== "remixed-firestore-database-id" &&
+      firebaseConfig.firestoreDatabaseId !== "(default)")
+      ? firebaseConfig.firestoreDatabaseId
+      : undefined;
+
+    firestoreDb = customDbId ? getFirestore(undefined, customDbId) : getFirestore();
     
     // Probe Firestore to verify if the API is configured and enabled in this project context
     try {
@@ -150,14 +156,23 @@ async function start() {
       await firestoreDb.collection("organizations").limit(1).get();
       console.log("[Firestore Probe] Success. Cloud Firestore is enabled and accessible.");
     } catch (probeErr: any) {
-      console.warn("--------------------------------------------------------------------------------");
-      console.warn("[Firestore Probe] FAILED/RESTRICTED:", probeErr.message || probeErr);
-      console.warn("[Firestore Probe] Falling back to 100% standalone emulated/relational MySQL mode.");
-      console.warn("--------------------------------------------------------------------------------");
-      firestoreDb = null;
+      if (customDbId && (probeErr.code === 5 || probeErr.message?.includes("NOT_FOUND"))) {
+        console.log("[Firestore Probe] Custom database not found, falling back to default database...");
+        try {
+          firestoreDb = getFirestore();
+          await firestoreDb.collection("organizations").limit(1).get();
+          console.log("[Firestore Probe] Success. Cloud Firestore is enabled and accessible on default database.");
+        } catch (defaultErr: any) {
+          console.log("[Firestore Probe] Cloud Firestore unavailable, operating in relational mode.");
+          firestoreDb = null;
+        }
+      } else {
+        console.log("[Firestore Probe] Cloud Firestore unavailable, operating in relational mode.");
+        firestoreDb = null;
+      }
     }
   } catch (fsInitErr: any) {
-    console.error("Critical: Failed to safely initialize firestoreDb reference:", fsInitErr.message);
+    console.log("[Firestore Probe] Could not initialize Firestore, operating in relational mode:", fsInitErr.message);
     firestoreDb = null;
   }
 

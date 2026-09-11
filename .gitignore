@@ -8,3 +8,13 @@ coverage/
 .env*
 !.env.example
 android/app/src/main/assets/public/
+firebase-service-account.json
+*.keystore
+*.jks
+*.aab
+*.apk
+backups/
+.idea/
+.gradle/
+**/build/
+android/.gradle/
