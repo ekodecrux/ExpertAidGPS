@@ -29,13 +29,13 @@ export default function LocationDisclosureModal({
               <MapPin className="w-8 h-8 text-white animate-bounce" />
             </div>
             <span className="inline-block px-2.5 py-0.5 rounded-full bg-blue-500/40 text-[10px] font-bold uppercase tracking-wider text-blue-100 mb-1 border border-blue-400/30">
-              Google Play Prominent Disclosure
+              Prominent Location Disclosure
             </span>
             <h2 className="text-lg sm:text-xl font-black tracking-tight text-white">
-              Location Access &amp; Background Tracking
+              Background Location Access Notice
             </h2>
             <p className="text-blue-100 text-xs mt-1">
-              Required for real-time fleet transport &amp; passenger safety
+              Required for live vehicle tracking &amp; passenger safety
             </p>
           </div>
 
@@ -47,7 +47,7 @@ export default function LocationDisclosureModal({
                 <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-bold text-amber-950 text-xs mb-1">
-                    Background Location Notice
+                    Prominent Disclosure
                   </p>
                   <p className="text-[11px] text-amber-900 leading-snug font-medium">
                     <strong>Expert GPS Tracking collects location data to enable real-time vehicle tracking, route navigation, and passenger arrival notifications even when the app is closed or not in use.</strong>
@@ -104,17 +104,17 @@ export default function LocationDisclosureModal({
             <button
               type="button"
               onClick={onDeny}
-              className="w-full sm:w-1/3 py-3 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors text-center"
+              className="w-full sm:w-1/3 py-3 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors text-center cursor-pointer"
             >
-              Deny
+              No, Thanks
             </button>
             <button
               type="button"
               onClick={onAccept}
-              className="w-full sm:w-2/3 py-3 px-4 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5 transition-colors text-center"
+              className="w-full sm:w-2/3 py-3 px-4 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5 transition-colors text-center cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              Accept &amp; Enable Location
+              Agree &amp; Enable Location
             </button>
           </div>
         </div>

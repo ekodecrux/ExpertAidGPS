@@ -3,6 +3,22 @@ import { isNativeApp } from './apiPatch';
 
 export const LOCATION_DISCLOSURE_KEY = 'expert_gps_location_disclosure_accepted';
 
+type DisclosureListener = (show: boolean) => void;
+let disclosureListeners: DisclosureListener[] = [];
+
+export function onShowLocationDisclosure(fn: DisclosureListener): () => void {
+  disclosureListeners.push(fn);
+  return () => {
+    disclosureListeners = disclosureListeners.filter(l => l !== fn);
+  };
+}
+
+export function triggerLocationDisclosure(): void {
+  if (!hasAcceptedLocationDisclosure()) {
+    disclosureListeners.forEach(fn => fn(true));
+  }
+}
+
 export function hasAcceptedLocationDisclosure(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -50,6 +66,14 @@ export async function checkIsLocationPermissionGranted(): Promise<boolean> {
 }
 
 export async function requestLocationPermissions(): Promise<boolean> {
+  // CRITICAL GOOGLE PLAY STORE REQUIREMENT:
+  // An app accessing BACKGROUND_LOCATION MUST NOT trigger the native Android runtime permission prompt
+  // before the user has seen and affirmatively accepted the in-app Prominent Disclosure.
+  if (!hasAcceptedLocationDisclosure()) {
+    triggerLocationDisclosure();
+    return false;
+  }
+
   try {
     if (isNativeApp()) {
       try {
