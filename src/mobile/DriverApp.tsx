@@ -12,6 +12,7 @@ import { isValidCoordinate, cn, getLocalAvatar, getUserAvatar } from '../lib/uti
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { saveMySQLRecord } from '../lib/mysql';
+import { setLocationDisclosureAccepted } from '../lib/locationService';
 
 export default function DriverApp() {
   const [activeTab, setActiveTab] = useState('home');
@@ -59,6 +60,9 @@ export default function DriverApp() {
     } catch (error) {
       console.warn('[LocationDisclosure] Could not persist consent locally:', error);
     }
+    // Keep the driver shell and shared location service on the same consent
+    // state so every location entry point observes the disclosure acceptance.
+    setLocationDisclosureAccepted(true);
     setLocationConsentAccepted(true);
   };
 

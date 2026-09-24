@@ -115,7 +115,11 @@ export async function requestLocationPermissions(): Promise<boolean> {
 }
 
 export async function getCurrentPosition(): Promise<{ lat: number; lng: number } | null> {
-  await requestLocationPermissions().catch(() => {});
+  // Do not call any geolocation API until the in-app prominent disclosure has
+  // been accepted and the permission gate has completed. Calling the native
+  // API after a rejected gate can show Android's runtime prompt first.
+  const permissionReady = await requestLocationPermissions().catch(() => false);
+  if (!permissionReady) return null;
 
   if (isNativeApp()) {
     // Tier 1: Capacitor High Accuracy
@@ -180,7 +184,10 @@ export async function watchLocation(
   onLocation: (lat: number, lng: number) => void,
   onError?: (err: any) => void
 ): Promise<() => void> {
-  await requestLocationPermissions().catch(() => {});
+  // A failed disclosure/permission gate must stop here; otherwise the native
+  // watch API can trigger a runtime prompt before the in-app disclosure.
+  const permissionReady = await requestLocationPermissions().catch(() => false);
+  if (!permissionReady) return () => {};
 
   let isCancelled = false;
   let nativeWatchId: string | null = null;
