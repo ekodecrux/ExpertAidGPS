@@ -142,13 +142,7 @@ async function start() {
 
   // Initialize Firebase Firestore and Auth references safely to prevent startup crash on quota or credential issues
   try {
-    const customDbId = (firebaseConfig.firestoreDatabaseId &&
-      firebaseConfig.firestoreDatabaseId !== "remixed-firestore-database-id" &&
-      firebaseConfig.firestoreDatabaseId !== "(default)")
-      ? firebaseConfig.firestoreDatabaseId
-      : undefined;
-
-    firestoreDb = customDbId ? getFirestore(undefined, customDbId) : getFirestore();
+    firestoreDb = firebaseConfig.firestoreDatabaseId ? getFirestore(undefined, firebaseConfig.firestoreDatabaseId) : getFirestore();
     
     // Probe Firestore to verify if the API is configured and enabled in this project context
     try {
@@ -156,23 +150,14 @@ async function start() {
       await firestoreDb.collection("organizations").limit(1).get();
       console.log("[Firestore Probe] Success. Cloud Firestore is enabled and accessible.");
     } catch (probeErr: any) {
-      if (customDbId && (probeErr.code === 5 || probeErr.message?.includes("NOT_FOUND"))) {
-        console.log("[Firestore Probe] Custom database not found, falling back to default database...");
-        try {
-          firestoreDb = getFirestore();
-          await firestoreDb.collection("organizations").limit(1).get();
-          console.log("[Firestore Probe] Success. Cloud Firestore is enabled and accessible on default database.");
-        } catch (defaultErr: any) {
-          console.log("[Firestore Probe] Cloud Firestore unavailable, operating in relational mode.");
-          firestoreDb = null;
-        }
-      } else {
-        console.log("[Firestore Probe] Cloud Firestore unavailable, operating in relational mode.");
-        firestoreDb = null;
-      }
+      console.warn("--------------------------------------------------------------------------------");
+      console.warn("[Firestore Probe] FAILED/RESTRICTED:", probeErr.message || probeErr);
+      console.warn("[Firestore Probe] Falling back to 100% standalone emulated/relational MySQL mode.");
+      console.warn("--------------------------------------------------------------------------------");
+      firestoreDb = null;
     }
   } catch (fsInitErr: any) {
-    console.log("[Firestore Probe] Could not initialize Firestore, operating in relational mode:", fsInitErr.message);
+    console.error("Critical: Failed to safely initialize firestoreDb reference:", fsInitErr.message);
     firestoreDb = null;
   }
 
@@ -303,27 +288,25 @@ async function start() {
         } catch (recoverErr: any) {
           console.warn("[Start-Up Recovery] Exception occurred during driver repair:", recoverErr.message);
         }
-      })();
+      }, 1000); // Defer by 1 second to not block startup
     }
   } catch (authInitErr: any) {
     console.error("Critical: Failed to safely initialize auth reference:", authInitErr.message);
   }
 
   const app = express();
-
-  // CORS Middleware for Mobile (Capacitor) & Cross-Origin API requests
+  
+  // Enable CORS for mobile apps and cross-origin requests
   app.use((req, res, next) => {
-    const origin = req.headers.origin || "*";
-    res.header("Access-Control-Allow-Origin", origin);
-    res.header("Access-Control-Allow-Credentials", "true");
-    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-client-type, x-org-id");
-    if (req.method === "OPTIONS") {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
     }
     next();
   });
-
+  
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
@@ -1032,6 +1015,14 @@ async function start() {
     }
 
     const token = authHeader.split("Bearer ")[1];
+    
+    // Add timeout to prevent hanging requests
+    const timeoutId = setTimeout(() => {
+      if (!res.headersSent) {
+        res.status(408).json({ success: false, error: "Request timeout. Please try again." });
+      }
+    }, 8000); // 8 second timeout
+    
     try {
       const decodedToken = await verifyTokenResilient(token);
       const isSuperAdminByEmail = decodedToken.email?.toLowerCase() === "ravikumarpendyala9182@gmail.com";
@@ -1123,8 +1114,10 @@ async function start() {
         }
       }
 
+      clearTimeout(timeoutId);
       return res.json({ success: true, userData: { ...userRow, id: userRow.uid, forcePasswordChange } });
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error("Token verification failed in verify-user api:", error);
       return res.status(401).json({ success: false, error: "Invalid token or session expired." });
     }
@@ -2098,17 +2091,17 @@ async function start() {
         routeRows = rows;
       }
       
-      // Get only route-relevant and role-relevant users (the student/user itself, and any team/drivers matching the route, plus all drivers) to preserve resources
+      // Get only route-relevant users: the driver themselves and users assigned to their route
       let orgUsersRows: any[] = [];
       if (routeId) {
         const [rows] = await conn.query(
-          "SELECT * FROM users WHERE orgId = ? AND (uid = ? OR routeId = ? OR role = 'driver')",
+          "SELECT * FROM users WHERE orgId = ? AND (uid = ? OR routeId = ?)",
           [orgId, uid, routeId]
         ) as any[];
         orgUsersRows = rows;
       } else {
         const [rows] = await conn.query(
-          "SELECT * FROM users WHERE orgId = ? AND (uid = ? OR role = 'driver')",
+          "SELECT * FROM users WHERE orgId = ? AND uid = ?",
           [orgId, uid]
         ) as any[];
         orgUsersRows = rows;
@@ -4990,6 +4983,45 @@ async function start() {
     }
   });
 
+  // Storage proxy for organization logos and assets
+  app.get('/api/storage/:filename', async (req, res) => {
+    const filename = req.params.filename;
+    
+    try {
+      // Get the storage presigned URL from Manus Forge API
+      const forgeUrl = process.env.BUILT_IN_FORGE_API_URL || 'https://api.manus.im';
+      const forgeKey = process.env.BUILT_IN_FORGE_API_KEY;
+      
+      if (!forgeKey) {
+        console.warn('BUILT_IN_FORGE_API_KEY not configured');
+        return res.status(500).json({ error: 'Storage not configured' });
+      }
+      
+      // Call Manus storage API to get presigned URL
+      const storageResponse = await fetch(`${forgeUrl}/storage/presigned-url`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${forgeKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          key: filename,
+          expiresIn: 3600,
+        }),
+      });
+      
+      if (!storageResponse.ok) {
+        return res.status(404).json({ error: 'Asset not found' });
+      }
+      
+      const { url } = await storageResponse.json();
+      res.redirect(url);
+    } catch (error) {
+      console.error('Storage proxy error:', error);
+      res.status(500).json({ error: 'Failed to retrieve asset' });
+    }
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -5013,13 +5045,21 @@ async function start() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*all", (req, res) => {
-      if (req.originalUrl.startsWith('/api')) {
-        return res.status(404).json({ error: "API route not found" });
-      }
-      res.sendFile(path.join(distPath, "index.html"));
-    });
   }
+
+  // API 404 handler - must be after all specific API routes
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: "API route not found" });
+    }
+    next();
+  });
+
+  // Catch-all route for SPA - must be LAST after all API routes
+  app.use((req, res) => {
+    const distPath = path.join(process.cwd(), "dist");
+    res.sendFile(path.join(distPath, "index.html"));
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`>>> SERVER READY ON PORT ${PORT} <<<`);

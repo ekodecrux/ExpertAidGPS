@@ -3,15 +3,12 @@ import MobileLayout from '../components/MobileLayout';
 import DriverDashboard from '../pages/DriverDashboard';
 import DriverRoutesView from './DriverRoutesView';
 import DriverMapView from './DriverMapView';
-import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight, MapPin, ShieldCheck } from 'lucide-react';
+import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, auth, auth as firebaseAuth } from '../lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { isValidCoordinate, cn, getLocalAvatar, getUserAvatar } from '../lib/utils';
-import { watchLocation, hasAcceptedLocationDisclosure, setLocationDisclosureAccepted, requestLocationPermissions, checkIsLocationPermissionGranted } from '../lib/locationService';
-import LocationDisclosureModal from '../components/LocationDisclosureModal';
-import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { saveMySQLRecord } from '../lib/mysql';
@@ -23,9 +20,6 @@ export default function DriverApp() {
   const [isSelectingRoute, setIsSelectingRoute] = useState(false);
   const [orgName, setOrgName] = useState<string>('');
   const [assignedVehicleId, setAssignedVehicleId] = useState<string>('DEV-V1');
-  const [showDisclosureModal, setShowDisclosureModal] = useState<boolean>(false);
-  const [showPrivacyModal, setShowPrivacyModal] = useState<boolean>(false);
-  const [disclosureAcceptedTrigger, setDisclosureAcceptedTrigger] = useState<number>(0);
   const [driverData, _setDriverData] = useState<any>(() => {
     if (!userData) return null;
     try {
@@ -49,6 +43,24 @@ export default function DriverApp() {
   };
   const [driverDataLoading, setDriverDataLoading] = useState<boolean>(!driverData);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const locationConsentKey = `expert_gps_background_location_consent_${userData?.id || userData?.uid || 'driver'}`;
+  const [locationConsentAccepted, setLocationConsentAccepted] = useState<boolean>(() => {
+    try {
+      const currentUserId = userData?.id || userData?.uid;
+      return currentUserId ? localStorage.getItem(`expert_gps_background_location_consent_${currentUserId}`) === 'accepted' : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const acceptLocationDisclosure = () => {
+    try {
+      localStorage.setItem(locationConsentKey, 'accepted');
+    } catch (error) {
+      console.warn('[LocationDisclosure] Could not persist consent locally:', error);
+    }
+    setLocationConsentAccepted(true);
+  };
 
   useEffect(() => {
     if (userData?.orgId) {
@@ -137,15 +149,7 @@ export default function DriverApp() {
               const matchedRoute = res.routes?.find((r: any) => 
                 r && (r.id === userData.routeId || r.driverId === currentDriverId)
               );
-              const matchedVehicle = res.vehicles?.find((v: any) => v && (
-                v.id === matchedTrip?.vehicleId ||
-                v.id === matchedRoute?.vehicleId ||
-                v.id === userData.vehicleId ||
-                (currentDriverId && v.driverId === currentDriverId) ||
-                (matchedRoute?.id && v.routeId === matchedRoute.id)
-              )) || res.vehicles?.[0];
-
-              const trackingVId = matchedTrip?.vehicleId || matchedVehicle?.id || matchedRoute?.vehicleId || userData.vehicleId || 'DEV-V1';
+              const trackingVId = matchedTrip?.vehicleId || matchedRoute?.vehicleId || userData.vehicleId || 'DEV-V1';
               setAssignedVehicleId(trackingVId);
             }
           }
@@ -168,82 +172,67 @@ export default function DriverApp() {
 
   // 3. Track and Update Driver's Live Location (Persistent across tabs)
   useEffect(() => {
+    // Never start geolocation before the in-app prominent disclosure has been accepted.
+    // This gate must run before navigator.geolocation.watchPosition can trigger Android permission UI.
+    if (!locationConsentAccepted) return;
+
     const trackingVehicleId = assignedVehicleId || userData?.vehicleId || activeTrip?.vehicleId || 'DEV-V1';
     if (!trackingVehicleId) return;
 
-    // Check prominent disclosure consent per Google Play Policy
-    if (!hasAcceptedLocationDisclosure()) {
-      checkIsLocationPermissionGranted().then((alreadyGranted) => {
-        if (!alreadyGranted) {
-          setShowDisclosureModal(true);
-        } else {
-          setDisclosureAcceptedTrigger(prev => prev + 1);
-        }
-      });
-      return;
-    }
+    let localWatchId: any;
+    let fallbackMode = false;
 
-    let cleanupWatch: (() => void) | null = null;
-
-    watchLocation(
-      (latitude, longitude) => {
-        if (isValidCoordinate(latitude, longitude)) {
-          const locObj = { lat: latitude, lng: longitude };
-
-          // Update the vehicle's location inside Firestore for real-time sync with children / map
-          setDoc(doc(db, 'vehicles', trackingVehicleId), {
-            location: locObj,
-            updatedAt: new Date().toISOString()
-          }, { merge: true }).catch(e => console.warn('Vehicle tracking Firestore setDoc error:', e));
-
-          // Update the vehicle's location inside MySQL
-          saveMySQLRecord('update', 'vehicles', trackingVehicleId, {
-            latitude: latitude,
-            longitude: longitude,
-            location: locObj,
-            updatedAt: new Date().toISOString()
-          }).catch(e => console.warn('Vehicle tracking saveMySQLRecord error:', e));
-
-          if (activeTrip?.id) {
-            saveMySQLRecord('update', 'trips', activeTrip.id, {
-              currentLat: latitude,
-              currentLng: longitude,
-              currentLocation: locObj,
+    const startTracking = (useHighAccuracy: boolean): any => {
+      return navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          if (isValidCoordinate(latitude, longitude)) {
+            // Update the vehicle's location inside Firestore for real-time sync with children / map
+            updateDoc(doc(db, 'vehicles', trackingVehicleId), {
+              location: { lat: latitude, lng: longitude },
               updatedAt: new Date().toISOString()
-            }).catch(() => {});
-            setDoc(doc(db, 'trips', activeTrip.id), {
-              currentLocation: locObj,
+            }).catch(e => console.warn('Vehicle tracking Firestore updateDoc error:', e));
+
+            // Update the vehicle's location inside MySQL
+            saveMySQLRecord('update', 'vehicles', trackingVehicleId, {
+              latitude: latitude,
+              longitude: longitude,
+              location: { lat: latitude, lng: longitude },
               updatedAt: new Date().toISOString()
-            }, { merge: true }).catch(() => {});
+            }).catch(e => console.warn('Vehicle tracking saveMySQLRecord error:', e));
           }
+        },
+        (err) => {
+          console.warn(`Geolocation tracking (highAccuracy=${useHighAccuracy}):`, err.message);
+          if (useHighAccuracy && !fallbackMode) {
+            fallbackMode = true;
+            if (localWatchId !== undefined) {
+              navigator.geolocation.clearWatch(localWatchId);
+            }
+            localWatchId = startTracking(false);
+          } else {
+            // Only alert/toast on persistent solid failures, skipping temporary timeouts
+            if (err.code !== 3) {
+              toast.error("GPS location tracking failed. Please ensure GPS is enabled.", { id: 'gps-driver-error' });
+            }
+          }
+        },
+        { 
+          enableHighAccuracy: useHighAccuracy, 
+          maximumAge: useHighAccuracy ? 10000 : 30000, 
+          timeout: 30000 
         }
-      },
-      (err) => {
-        console.warn('DriverApp watchLocation error:', err);
-      }
-    ).then((stopFn) => {
-      cleanupWatch = stopFn;
-    });
+      );
+    };
+
+    localWatchId = startTracking(true);
 
     return () => {
-      if (cleanupWatch) {
-        cleanupWatch();
+      if (localWatchId !== undefined) {
+        navigator.geolocation.clearWatch(localWatchId);
       }
     };
-  }, [assignedVehicleId, userData?.vehicleId, activeTrip?.vehicleId, disclosureAcceptedTrigger]);
-
-  const handleAcceptLocationDisclosure = async () => {
-    setLocationDisclosureAccepted(true);
-    setShowDisclosureModal(false);
-    setDisclosureAcceptedTrigger(prev => prev + 1);
-    toast.success('Location tracking enabled for active shifts');
-    await requestLocationPermissions().catch(() => {});
-  };
-
-  const handleDenyLocationDisclosure = () => {
-    setShowDisclosureModal(false);
-    toast.error('Location tracking paused. Enable location when starting your route.');
-  };
+  }, [assignedVehicleId, userData?.vehicleId, activeTrip?.vehicleId, locationConsentAccepted]);
 
   const handleStopTrip = async () => {
     if (!activeTrip) return;
@@ -421,6 +410,7 @@ export default function DriverApp() {
             driverDataLoading={driverDataLoading}
             activeTrip={activeTrip}
             setActiveTrip={setActiveTrip}
+            locationConsentAccepted={locationConsentAccepted}
           />
         );
       case 'routes':
@@ -513,42 +503,6 @@ export default function DriverApp() {
               </div>
 
               <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-50 space-y-4">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 mb-4">Location &amp; Privacy</h3>
-                
-                <button 
-                  onClick={() => setShowDisclosureModal(true)}
-                  className="w-full flex items-center justify-between p-4 bg-blue-50/70 border border-blue-100 rounded-2xl text-blue-700 active:scale-95 transition-all text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
-                      <MapPin size={17} />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Location Disclosure</p>
-                      <p className="text-[9px] text-blue-600/80 font-bold mt-0.5">Google Play background tracking notice</p>
-                    </div>
-                  </div>
-                  <ChevronRight size={16} className="text-blue-400" />
-                </button>
-
-                <button 
-                  onClick={() => setShowPrivacyModal(true)}
-                  className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 active:scale-95 transition-all text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-slate-200/70 flex items-center justify-center text-slate-600">
-                      <ShieldCheck size={17} />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Privacy Policy</p>
-                      <p className="text-[9px] text-slate-400 font-bold mt-0.5">User data &amp; security terms</p>
-                    </div>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-400" />
-                </button>
-              </div>
-
-              <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-50 space-y-4">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 mb-4">Account Security</h3>
                 
                 <button 
@@ -585,6 +539,7 @@ export default function DriverApp() {
             driverDataLoading={driverDataLoading}
             activeTrip={activeTrip}
             setActiveTrip={setActiveTrip}
+            locationConsentAccepted={locationConsentAccepted}
           />
         );
     }
@@ -601,19 +556,55 @@ export default function DriverApp() {
         {renderContent()}
       </MobileLayout>
 
-      {/* Prominent Location Disclosure Modal (Google Play Policy Compliant) */}
-      <LocationDisclosureModal
-        isOpen={showDisclosureModal}
-        onAccept={handleAcceptLocationDisclosure}
-        onDeny={handleDenyLocationDisclosure}
-        requiredForRole="driver"
-      />
+      {!locationConsentAccepted && userData && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 px-5 py-8 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="location-disclosure-title"
+            className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl"
+          >
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/25">
+                <Navigation size={22} />
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-600">Driver safety feature</p>
+                <h2 id="location-disclosure-title" className="text-xl font-black uppercase italic tracking-tight text-slate-900">Location access</h2>
+              </div>
+            </div>
 
-      {/* Full Privacy Policy Modal */}
-      <PrivacyPolicyModal
-        isOpen={showPrivacyModal}
-        onClose={() => setShowPrivacyModal(false)}
-      />
+            <p className="text-sm font-semibold leading-6 text-slate-700">
+              Expert GPS Tracking collects your device location while Driver Tracking is active so your assigned vehicle can be shown on the live route map and your organization can keep an active trip updated for authorized users.
+            </p>
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              Location is used only for driver trip tracking and is transmitted to Expert GPS Tracking servers for your organization. Tracking begins only after you choose <strong>Allow location access</strong>, runs while the driver tracking experience is active, and can be stopped by ending the trip or disabling location permission in Android settings.
+            </p>
+
+            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-[10px] font-bold leading-4 text-blue-900">
+              Please read this disclosure before the Android location permission prompt appears. Your choice is required to use live driver tracking.
+              <a href="/privacy-policy" target="_blank" rel="noreferrer" className="mt-1 block font-black underline">Read the full Privacy Policy</a>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => toast.error('Location access is required to use live driver tracking.')}
+                className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 active:scale-95"
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                onClick={acceptLocationDisclosure}
+                className="flex-1 rounded-2xl bg-blue-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-600/25 active:scale-95"
+              >
+                Allow location access
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -62,6 +62,7 @@ interface DriverDashboardProps {
   driverDataLoading?: boolean;
   activeTrip?: any;
   setActiveTrip?: (t: any) => void;
+  locationConsentAccepted?: boolean;
 }
 
 export default function DriverDashboard({
@@ -70,6 +71,7 @@ export default function DriverDashboard({
   driverDataLoading,
   activeTrip: propActiveTrip,
   setActiveTrip: propSetActiveTrip,
+  locationConsentAccepted = false,
 }: DriverDashboardProps = {}) {
   const { userData } = useAuth();
   const [route, setRoute] = useState<any>(null);
@@ -634,6 +636,11 @@ export default function DriverDashboard({
   const termSingular = getSectorTerminology(org?.sector, false);
 
   const toggleTrip = async () => {
+    if (!locationConsentAccepted) {
+      toast.error('Please review and accept the location disclosure before starting a trip.');
+      return;
+    }
+
     try {
       if (isTracking) {
         // STOP TRIP
