@@ -17,12 +17,12 @@ android {
         }
     }
 
-    // Release signing is loaded from android/key.properties or environment variables.
+    // Release signing is loaded from android/app/key.properties or environment variables.
     // If neither is available, release builds use the standard debug keystore so that
     // APK/AAB generation can still be validated. A real Play upload must use a release keystore.
     signingConfigs {
         release {
-            def keyPropertiesFile = file('key.properties')
+            def keyPropertiesFile = file('key.properties').exists() ? file('key.properties') : file('../key.properties')
             def keyProperties = new Properties()
             if (keyPropertiesFile.exists()) {
                 keyProperties.load(new FileInputStream(keyPropertiesFile))

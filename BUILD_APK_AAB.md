@@ -33,7 +33,7 @@ When no release keystore is configured, Gradle uses the standard debug keystore 
 
 ## Google Play release signing
 
-For a Play-uploadable build, configure a release keystore through `android/key.properties` or environment variables. The file must contain:
+For a Play-uploadable build, configure a release keystore through `android/app/key.properties` or environment variables. Place the file beside `android/app/build.gradle`. The file must contain:
 
 ```properties
 storeFile=/absolute/path/to/release-key.jks

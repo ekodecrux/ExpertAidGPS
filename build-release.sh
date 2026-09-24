@@ -37,7 +37,12 @@ printf 'sdk.dir=%s\n' "${SDK_DIR//\\/\\\\}" > "$ANDROID_DIR/local.properties"
 export ANDROID_HOME="$SDK_DIR"
 export ANDROID_SDK_ROOT="$SDK_DIR"
 
-if [[ -z "${KEYSTORE_FILE:-}" && ! -f "$ANDROID_DIR/key.properties" ]]; then
+KEY_PROPERTIES_FILE="$ANDROID_DIR/app/key.properties"
+if [[ ! -f "$KEY_PROPERTIES_FILE" && -f "$ANDROID_DIR/key.properties" ]]; then
+  KEY_PROPERTIES_FILE="$ANDROID_DIR/key.properties"
+fi
+
+if [[ -z "${KEYSTORE_FILE:-}" && ! -f "$KEY_PROPERTIES_FILE" ]]; then
   warn "No release keystore configured; Gradle will use the debug keystore for local validation only."
   warn "For Play upload, set KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD."
 else
@@ -67,7 +72,7 @@ info "Building release APK"
 [[ -f "$APK" ]] || fail "APK was not produced: $APK"
 info "APK created: $APK ($(du -h "$APK" | cut -f1))"
 
-if [[ -z "${KEYSTORE_FILE:-}" && ! -f "$ANDROID_DIR/key.properties" ]]; then
+if [[ -z "${KEYSTORE_FILE:-}" && ! -f "$KEY_PROPERTIES_FILE" ]]; then
   warn "This build uses debug signing and must not be uploaded to Google Play."
 else
   info "Signed release artifacts are ready for inspection and Play Console upload."
