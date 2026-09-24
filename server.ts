@@ -166,7 +166,8 @@ async function start() {
     
     // Self-healing / automatic recovery block for driver joshan043@gmail.com
     if (auth && firestoreDb) {
-      (async () => {
+      setTimeout(() => {
+        void (async () => {
         try {
           const email = "joshan043@gmail.com";
           const targetUid = "3ZGzcqjIxheU9PCVrOQzbEbqLHd2";
@@ -288,6 +289,7 @@ async function start() {
         } catch (recoverErr: any) {
           console.warn("[Start-Up Recovery] Exception occurred during driver repair:", recoverErr.message);
         }
+        })();
       }, 1000); // Defer by 1 second to not block startup
     }
   } catch (authInitErr: any) {
