@@ -1,166 +1,74 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Expert GPS Tracking - Automated Release Build Script
-# This script builds the Android App Bundle (AAB) for Google Play Store submission
+# ExpertAidGPS Android release build helper.
+#
+# Required for a real Google Play upload:
+#   KEYSTORE_FILE=/absolute/path/release.jks
+#   KEYSTORE_PASSWORD=...
+#   KEY_ALIAS=...
+#   KEY_PASSWORD=...
+#
+# If these are omitted, Gradle uses the standard debug keystore so that the
+# build can still be validated locally. That fallback is not suitable for Play.
 
-set -e  # Exit on error
+set -Eeuo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANDROID_DIR="$PROJECT_ROOT/android"
-BUILD_OUTPUT="$ANDROID_DIR/app/build/outputs/bundle/release/app-release.aab"
 
-# Functions
-print_header() {
-    echo -e "${BLUE}========================================${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}========================================${NC}"
-}
+info() { printf '\033[1;34m[ExpertAidGPS]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[ExpertAidGPS warning]\033[0m %s\n' "$*"; }
+fail() { printf '\033[1;31m[ExpertAidGPS error]\033[0m %s\n' "$*" >&2; exit 1; }
 
-print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
-}
+command -v node >/dev/null 2>&1 || fail "Node.js is required."
+command -v npm >/dev/null 2>&1 || fail "npm is required."
+command -v java >/dev/null 2>&1 || fail "Java 21 JDK is required. Install a JDK, not only a JRE."
 
-print_error() {
-    echo -e "${RED}✗ $1${NC}"
-}
+JAVA_MAJOR="$(java -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | head -1)"
+[[ "$JAVA_MAJOR" == "21" ]] || warn "Detected Java $JAVA_MAJOR; Android builds for this project are validated with Java 21."
 
-print_warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
-}
-
-# Start
-print_header "Expert GPS Tracking - Release Build"
-
-# Step 1: Check prerequisites
-print_header "Step 1: Checking Prerequisites"
-
-if ! command -v node &> /dev/null; then
-    print_error "Node.js not found"
-    exit 1
+SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+if [[ -z "$SDK_DIR" && -f "$ANDROID_DIR/local.properties" ]]; then
+  SDK_DIR="$(sed -n 's/^sdk.dir=//p' "$ANDROID_DIR/local.properties" | head -1)"
 fi
-print_success "Node.js found: $(node --version)"
+[[ -n "$SDK_DIR" ]] || fail "Android SDK not configured. Set ANDROID_HOME/ANDROID_SDK_ROOT or create android/local.properties from android/local.properties.template."
+[[ -d "$SDK_DIR" ]] || fail "Android SDK directory does not exist: $SDK_DIR"
+printf 'sdk.dir=%s\n' "${SDK_DIR//\\/\\\\}" > "$ANDROID_DIR/local.properties"
+export ANDROID_HOME="$SDK_DIR"
+export ANDROID_SDK_ROOT="$SDK_DIR"
 
-if ! command -v pnpm &> /dev/null; then
-    print_error "pnpm not found"
-    exit 1
+if [[ -z "${KEYSTORE_FILE:-}" && ! -f "$ANDROID_DIR/key.properties" ]]; then
+  warn "No release keystore configured; Gradle will use the debug keystore for local validation only."
+  warn "For Play upload, set KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD."
+else
+  info "Release signing configuration detected."
 fi
-print_success "pnpm found: $(pnpm --version)"
-
-if ! command -v java &> /dev/null; then
-    print_error "Java not found"
-    exit 1
-fi
-print_success "Java found: $(java -version 2>&1 | head -1)"
-
-# Step 2: Check environment variables
-print_header "Step 2: Checking Signing Credentials"
-
-if [ -z "$KEYSTORE_PASSWORD" ]; then
-    print_warning "KEYSTORE_PASSWORD not set"
-    read -sp "Enter keystore password: " KEYSTORE_PASSWORD
-    echo
-fi
-
-if [ -z "$KEY_ALIAS" ]; then
-    print_warning "KEY_ALIAS not set"
-    read -p "Enter key alias: " KEY_ALIAS
-fi
-
-if [ -z "$KEY_PASSWORD" ]; then
-    print_warning "KEY_PASSWORD not set"
-    read -sp "Enter key password: " KEY_PASSWORD
-    echo
-fi
-
-# Step 3: Build web app
-print_header "Step 3: Building Web App"
 
 cd "$PROJECT_ROOT"
-print_warning "Running: pnpm run build"
-pnpm run build || {
-    print_error "Web build failed"
-    exit 1
-}
-print_success "Web app built successfully"
+if [[ ! -d node_modules ]]; then
+  info "Installing locked npm dependencies with npm ci"
+  npm ci
+fi
 
-# Step 4: Sync Capacitor
-print_header "Step 4: Syncing Capacitor"
-
-print_warning "Running: npx cap sync android"
-npx cap sync android || {
-    print_error "Capacitor sync failed"
-    exit 1
-}
-print_success "Capacitor synced successfully"
-
-# Step 5: Build AAB
-print_header "Step 5: Building Android App Bundle (AAB)"
+info "Building web app and syncing Capacitor"
+npm run build:mobile
 
 cd "$ANDROID_DIR"
+info "Building release AAB"
+./gradlew clean bundleRelease --no-daemon
 
-# Export signing credentials
-export KEYSTORE_PASSWORD
-export KEY_ALIAS
-export KEY_PASSWORD
+AAB="$ANDROID_DIR/app/build/outputs/bundle/release/app-release.aab"
+APK="$ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
+[[ -f "$AAB" ]] || fail "AAB was not produced: $AAB"
+info "AAB created: $AAB ($(du -h "$AAB" | cut -f1))"
 
-print_warning "Running: ./gradlew bundleRelease"
-./gradlew bundleRelease || {
-    print_error "AAB build failed"
-    exit 1
-}
-print_success "AAB built successfully"
+info "Building release APK"
+./gradlew assembleRelease --no-daemon
+[[ -f "$APK" ]] || fail "APK was not produced: $APK"
+info "APK created: $APK ($(du -h "$APK" | cut -f1))"
 
-# Step 6: Verify output
-print_header "Step 6: Verifying Build Output"
-
-if [ -f "$BUILD_OUTPUT" ]; then
-    SIZE=$(du -h "$BUILD_OUTPUT" | cut -f1)
-    print_success "AAB file created: $BUILD_OUTPUT"
-    print_success "File size: $SIZE"
+if [[ -z "${KEYSTORE_FILE:-}" && ! -f "$ANDROID_DIR/key.properties" ]]; then
+  warn "This build uses debug signing and must not be uploaded to Google Play."
 else
-    print_error "AAB file not found at expected location"
-    exit 1
+  info "Signed release artifacts are ready for inspection and Play Console upload."
 fi
-
-# Step 7: Summary
-print_header "Build Complete!"
-
-echo ""
-echo -e "${GREEN}Your app is ready for Play Store submission!${NC}"
-echo ""
-echo "Next steps:"
-echo "1. Go to https://play.google.com/console"
-echo "2. Create a new app or select existing app"
-echo "3. Upload the AAB file:"
-echo "   $BUILD_OUTPUT"
-echo ""
-echo "4. Add app store listing:"
-echo "   - Screenshots"
-echo "   - Description"
-echo "   - Privacy policy"
-echo "   - Content rating"
-echo ""
-echo "5. Submit for review"
-echo ""
-echo "For detailed instructions, see: PLAYSTORE_BUILD_GUIDE.md"
-echo ""
-
-# Optional: Create backup
-read -p "Create backup of AAB file? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    BACKUP_DIR="$PROJECT_ROOT/builds/$(date +%Y%m%d_%H%M%S)"
-    mkdir -p "$BACKUP_DIR"
-    cp "$BUILD_OUTPUT" "$BACKUP_DIR/"
-    print_success "Backup created: $BACKUP_DIR"
-fi
-
-print_success "Build script completed successfully!"
