@@ -15,6 +15,7 @@ import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { saveMySQLRecord } from '../lib/mysql';
+import { getBackendUrl } from '../lib/apiPatch';
 
 export default function DriverApp() {
   const [activeTab, setActiveTab] = useState('home');
@@ -100,9 +101,13 @@ export default function DriverApp() {
 
     const fetchActiveTripFromMySQL = async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        let token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         if (!token) return;
-        const resObj = await fetch('/api/records/user-data', {
+        const backendUrl = getBackendUrl();
+        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

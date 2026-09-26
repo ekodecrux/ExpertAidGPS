@@ -11,6 +11,7 @@ import { doc, onSnapshot, collection, query, where, getDocs, addDoc, serverTimes
 import { db, auth } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { saveMySQLRecord } from '../lib/mysql';
+import { getBackendUrl } from '../lib/apiPatch';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
@@ -197,9 +198,13 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
   // High-performance data-refresh mechanism driven entirely and end-to-end by MySQL (bypassing Firestore)
   const fetchMySQLData = async () => {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      let token = await auth.currentUser?.getIdToken().catch(() => null);
+      if (!token) {
+        token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+      }
       if (!token) return;
-      const resObj = await fetch('/api/records/admin-data', {
+      const backendUrl = getBackendUrl();
+      const resObj = await fetch(`${backendUrl}/api/records/admin-data`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

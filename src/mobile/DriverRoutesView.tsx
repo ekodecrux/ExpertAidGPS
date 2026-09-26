@@ -6,6 +6,7 @@ import { db, auth } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { cn, getSectorTerminology, getSortedStops, getLocalAvatar, isValidCoordinate, getUserAvatar } from '../lib/utils';
 import { saveMySQLRecord } from '../lib/mysql';
+import { getBackendUrl } from '../lib/apiPatch';
 import toast from 'react-hot-toast';
 
 interface DriverRoutesViewProps {
@@ -174,9 +175,13 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
 
     const fetchMySQLDriverRoutesData = async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        let token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         if (!token) return;
-        const resObj = await fetch('/api/records/user-data', {
+        const backendUrl = getBackendUrl();
+        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

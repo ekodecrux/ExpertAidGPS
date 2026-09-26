@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { cn, getLocalIcon } from '../lib/utils';
+import { getBackendUrl } from '../lib/apiPatch';
 import toast from 'react-hot-toast';
 import { PhoneInput } from '../components/PhoneInput';
 import { BarChart, Bar, XAxis, YAxis, Tooltip as ChartTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -554,10 +555,14 @@ export default function SuperAdminDashboard({ view = 'overview' }: { view?: 'ove
 
   const fetchAdminData = async () => {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      let token = await auth.currentUser?.getIdToken().catch(() => null);
+      if (!token) {
+        token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+      }
       if (!token) return;
 
-      const response = await fetch('/api/records/admin-data', {
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/api/records/admin-data`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -622,10 +627,14 @@ export default function SuperAdminDashboard({ view = 'overview' }: { view?: 'ove
   };
 
   const saveMySQLRecord = async (operation: 'insert' | 'update' | 'delete', table: string, id: string, data?: any) => {
-    const token = await auth.currentUser?.getIdToken();
+    let token = await auth.currentUser?.getIdToken().catch(() => null);
+    if (!token) {
+      token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+    }
     if (!token) throw new Error('Unauthenticated');
     
-    const response = await fetch('/api/records/save', {
+    const backendUrl = getBackendUrl();
+    const response = await fetch(`${backendUrl}/api/records/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -797,9 +806,13 @@ export default function SuperAdminDashboard({ view = 'overview' }: { view?: 'ove
 
       // Create admin user for this organization
       try {
-        const idToken = await auth.currentUser?.getIdToken();
+        let idToken = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!idToken) {
+          idToken = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         
-        const response = await fetch('/api/admin/create-client', {
+        const backendUrl = getBackendUrl();
+        const response = await fetch(`${backendUrl}/api/admin/create-client`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1156,9 +1169,13 @@ export default function SuperAdminDashboard({ view = 'overview' }: { view?: 'ove
 
     const tId = toast.loading('Generating login details...');
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      let idToken = await auth.currentUser?.getIdToken().catch(() => null);
+      if (!idToken) {
+        idToken = localStorage.getItem("expert_gps_fallback_token") || undefined;
+      }
       
-      const response = await fetch('/api/admin/generate-login-details', {
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/api/admin/generate-login-details`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

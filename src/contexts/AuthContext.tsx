@@ -112,7 +112,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!token) {
             token = await currentUser.getIdToken(false);
           }
-          const response = await fetch('/api/auth/verify-user', {
+          const backendUrl = getBackendUrl();
+          const response = await fetch(`${backendUrl}/api/auth/verify-user`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -123,7 +124,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!response.ok) {
             const errResult = await response.json().catch(() => ({ error: 'Verification failed' }));
             console.warn("User verification check failed:", errResult.error);
-            if (response.status === 401 || response.status === 403 || response.status === 404) {
+            // If we have cached user data, retain the session instead of kicking out the user
+            const cachedDataStr = localStorage.getItem(`expert_gps_user_${currentUser.uid}`) || localStorage.getItem("expert_gps_fallback_user");
+            if (cachedDataStr) {
+              try {
+                const cachedUserData = JSON.parse(cachedDataStr);
+                setUserData(cachedUserData);
+              } catch (e) {}
+            } else if (response.status === 401 || response.status === 403) {
               setUserData(null);
               setUser(null);
               localStorage.removeItem("expert_gps_fallback_token");

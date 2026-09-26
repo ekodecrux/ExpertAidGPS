@@ -160,7 +160,10 @@ export async function getCurrentPosition(options?: { fast?: boolean; maxAge?: nu
     return cached;
   }
 
-  requestLocationPermissions().catch(() => {});
+  const permissionReady = await requestLocationPermissions().catch(() => false);
+  if (!permissionReady && isNativeApp()) {
+    return cached;
+  }
 
   if (isNativeApp()) {
     try {
@@ -239,7 +242,10 @@ export async function watchLocation(
   onLocation: (lat: number, lng: number) => void,
   onError?: (err: any) => void
 ): Promise<() => void> {
-  await requestLocationPermissions().catch(() => {});
+  const permissionReady = await requestLocationPermissions().catch(() => false);
+  if (!permissionReady && isNativeApp()) {
+    return () => {};
+  }
 
   let isCancelled = false;
   let nativeWatchId: string | null = null;

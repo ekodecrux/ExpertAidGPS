@@ -8,6 +8,7 @@ import { Activity, Navigation, Info, Bell, MapPin, Clock, Shield, Truck, X, Chec
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'react-hot-toast';
 import { saveMySQLRecord } from '../lib/mysql';
+import { getBackendUrl } from '../lib/apiPatch';
 
 interface UserMapViewProps {
   userDbData?: any;
@@ -162,9 +163,13 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
 
     const fetchMySQLMobileData = async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        let token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         if (!token) return;
-        const resObj = await fetch('/api/records/user-data', {
+        const backendUrl = getBackendUrl();
+        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

@@ -5,6 +5,7 @@ import { doc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import { MapPin, Clock, Bus, ChevronRight, CheckCircle2, History, Truck, ChevronDown, Compass } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getSortedStops, getLocalIcon, isValidCoordinate, getDistance, calculateArrivalTime } from '../lib/utils';
+import { getBackendUrl } from '../lib/apiPatch';
 
 export interface StopEtaInfo {
   mins: number;
@@ -124,9 +125,13 @@ export default function UserRoutesView({ userDbData, userDbDataLoading }: UserRo
 
     const fetchMySQLMobileData = async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        let token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         if (!token) return;
-        const resObj = await fetch('/api/records/user-data', {
+        const backendUrl = getBackendUrl();
+        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
