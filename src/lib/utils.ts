@@ -149,5 +149,21 @@ export function cleanMessage(msg: string): string {
     .trim();
 }
 
+/**
+ * Calculates the clock arrival time by adding estimated duration (in minutes) to the present time.
+ * E.g., if current time is 08:15 AM and minsFromNow is 4, returns "08:19 AM".
+ */
+export function calculateArrivalTime(minsFromNow: number): string {
+  if (isNaN(minsFromNow) || minsFromNow < 0) return '--:--';
+  const target = new Date(Date.now() + Math.round(minsFromNow) * 60 * 1000);
+  let hours = target.getHours();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12; // 0 is 12 AM / 12 PM
+  const minsStr = target.getMinutes().toString().padStart(2, '0');
+  const hrsStr = hours.toString().padStart(2, '0');
+  return `${hrsStr}:${minsStr} ${ampm}`;
+}
+
 
 

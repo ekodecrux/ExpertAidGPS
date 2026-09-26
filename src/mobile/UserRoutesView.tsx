@@ -4,7 +4,12 @@ import { auth, db } from '../lib/firebase';
 import { doc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import { MapPin, Clock, Bus, ChevronRight, CheckCircle2, History, Truck, ChevronDown, Compass } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getSortedStops, getLocalIcon, isValidCoordinate, getDistance } from '../lib/utils';
+import { getSortedStops, getLocalIcon, isValidCoordinate, getDistance, calculateArrivalTime } from '../lib/utils';
+
+export interface StopEtaInfo {
+  mins: number;
+  timeStr: string;
+}
 
 interface UserRoutesViewProps {
   userDbData?: any;
@@ -26,7 +31,7 @@ export default function UserRoutesView({ userDbData, userDbDataLoading }: UserRo
     return true;
   });
   const [isExpanded, setIsExpanded] = useState(false);
-  const [stopEtas, setStopEtas] = useState<Record<string, string>>({});
+  const [stopEtas, setStopEtas] = useState<Record<string, StopEtaInfo>>({});
 
   useEffect(() => {
     if (userDbDataLoading && !userDbData) {
@@ -217,7 +222,7 @@ export default function UserRoutesView({ userDbData, userDbDataLoading }: UserRo
         }
       }
 
-      const newEtas: Record<string, string> = {};
+      const newEtas: Record<string, StopEtaInfo> = {};
 
       if (data && data.routes?.[0] && data.routes[0].legs) {
         const legs = data.routes[0].legs;
@@ -227,7 +232,10 @@ export default function UserRoutesView({ userDbData, userDbDataLoading }: UserRo
           const targetStop = upcomingStops[idx];
           if (targetStop) {
             const mins = Math.max(1, Math.ceil(cumulativeDuration / 60));
-            newEtas[targetStop.id] = `${mins} Mins`;
+            newEtas[targetStop.id] = {
+              mins,
+              timeStr: calculateArrivalTime(mins)
+            };
           }
         });
       } else {
@@ -244,7 +252,10 @@ export default function UserRoutesView({ userDbData, userDbDataLoading }: UserRo
 
             // estimate speed of 30 km/h (2 mins/km) + 1.5 mins dwell time per intermediate stop
             const estMins = Math.max(1, Math.round(cumulativeDistance * 1.8 + 2 + idx * 1.5));
-            newEtas[stop.id] = `${estMins} Mins`;
+            newEtas[stop.id] = {
+              mins: estMins,
+              timeStr: calculateArrivalTime(estMins)
+            };
           }
         });
       }
@@ -461,8 +472,17 @@ export default function UserRoutesView({ userDbData, userDbDataLoading }: UserRo
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-[7px] font-black text-blue-200 uppercase tracking-widest leading-none mb-1">Time</p>
-                          <p className="text-xs font-black text-white">{userStop.time}</p>
+                          <p className="text-[7px] font-black text-blue-200 uppercase tracking-widest leading-none mb-1">
+                            {stopEtas[userStop.id]?.timeStr ? 'Estimated Arrival' : 'Scheduled Time'}
+                          </p>
+                          <p className="text-xs font-black text-white">
+                            {stopEtas[userStop.id]?.timeStr || userStop.time}
+                          </p>
+                          {stopEtas[userStop.id]?.mins !== undefined && (
+                            <p className="text-[9px] font-bold text-blue-200/90 mt-0.5">
+                              ({stopEtas[userStop.id].mins <= 1 ? 'Arriving now' : `${stopEtas[userStop.id].mins} Mins`})
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
@@ -550,16 +570,21 @@ export default function UserRoutesView({ userDbData, userDbDataLoading }: UserRo
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="text-right flex flex-col items-end">
                         <p className={`text-[9px] font-black uppercase tracking-widest ${isCurrent ? 'text-white/70' : 'text-slate-400'}`}>
-                          {isPast ? 'Reached' : isCurrent ? 'Active' : 'Estimated'}
+                          {isPast ? 'Reached' : isCurrent ? 'Active • Arriving' : 'Estimated'}
                         </p>
-                        <p className={`text-xs font-black ${isCurrent ? 'text-white' : 'text-slate-900'}`}>
+                        <p className={`text-xs sm:text-sm font-black tracking-tight ${isCurrent ? 'text-white' : 'text-slate-900'}`}>
                           {isPast 
                             ? (stop.reachedTime || stop.time) 
-                            : (stopEtas[stop.id] || stop.time)
+                            : (stopEtas[stop.id]?.timeStr || stop.time)
                           }
                         </p>
+                        {!isPast && stopEtas[stop.id]?.mins !== undefined && (
+                          <span className={`text-[10px] font-extrabold mt-0.5 ${isCurrent ? 'text-blue-100' : 'text-blue-600'}`}>
+                            {stopEtas[stop.id].mins <= 1 ? 'Arriving now' : `${stopEtas[stop.id].mins} Mins`}
+                          </span>
+                        )}
                       </div>
                     </motion.div>
                   );

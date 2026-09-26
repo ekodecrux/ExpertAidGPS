@@ -5,6 +5,7 @@ import { cn, getLocalAvatar, getUserAvatar, getLocalIcon, cleanMessage, getNotif
 import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { saveMySQLRecord } from '../lib/mysql';
 
 interface MobileLayoutProps {
@@ -43,13 +44,19 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   const hasUnread = activeNotifications.length > 0; 
 
   useEffect(() => {
-    if (!userData?.orgId) return;
-    const unsub = onSnapshot(doc(db, 'organizations', userData.orgId), (docSnap) => {
-      if (docSnap.exists()) {
-        setOrg({ id: docSnap.id, ...docSnap.data() });
-      }
-    });
-    return () => unsub();
+    if (!auth.currentUser || !userData?.orgId) return;
+    try {
+      const unsub = onSnapshot(doc(db, 'organizations', userData.orgId), (docSnap) => {
+        if (docSnap.exists()) {
+          setOrg({ id: docSnap.id, ...docSnap.data() });
+        }
+      }, (error) => {
+        console.warn(`[MobileLayout] Firestore organizations/${userData.orgId} read notice:`, error?.message || error);
+      });
+      return () => unsub();
+    } catch (err: any) {
+      console.warn(`[MobileLayout] Organizations subscription notice:`, err?.message);
+    }
   }, [userData?.orgId]);
 
   useEffect(() => {
@@ -273,17 +280,24 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className={cn(
-        "flex-1 relative flex flex-col min-h-0",
-        (activeTab === 'map' || activeTab === 'track') ? "overflow-hidden" : "overflow-y-auto"
-      )}>
+      <main 
+        className={cn(
+          "flex-1 relative flex flex-col min-h-0",
+          activeTab === 'map' ? "overflow-hidden" : "overflow-y-auto overscroll-y-contain"
+        )}
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          touchAction: 'pan-y'
+        }}
+      >
         <motion.div
           key={activeTab}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
+          style={{ touchAction: 'pan-y' }}
           className={cn(
-            "transition-all duration-300 flex-1 flex flex-col relative",
-            (activeTab === 'map' || activeTab === 'track') ? "h-full p-0 overflow-hidden" : "p-4 min-h-full pb-24"
+            "transition-all duration-300 flex-1 flex flex-col relative w-full",
+            activeTab === 'map' ? "h-full p-0 overflow-hidden" : "p-4 min-h-full pb-28"
           )}
         >
           {children}

@@ -1222,7 +1222,7 @@ export default function DriverMapView({
           center={mapCenter}
           className="z-0"
           hideControls={false}
-          hideMapStyles={true}
+          hideMapStyles={false}
           hideUserLocation={false}
           highAccuracy={true}
           controlsPosition="top-right"

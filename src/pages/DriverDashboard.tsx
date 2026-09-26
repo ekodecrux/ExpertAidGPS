@@ -62,7 +62,6 @@ interface DriverDashboardProps {
   driverDataLoading?: boolean;
   activeTrip?: any;
   setActiveTrip?: (t: any) => void;
-  locationConsentAccepted?: boolean;
 }
 
 export default function DriverDashboard({
@@ -71,7 +70,6 @@ export default function DriverDashboard({
   driverDataLoading,
   activeTrip: propActiveTrip,
   setActiveTrip: propSetActiveTrip,
-  locationConsentAccepted = false,
 }: DriverDashboardProps = {}) {
   const { userData } = useAuth();
   const [route, setRoute] = useState<any>(null);
@@ -85,9 +83,6 @@ export default function DriverDashboard({
   const [tripType, setTripType] = useState<"pickup" | "dropoff">("pickup");
   const [isTracking, setIsTracking] = useState(false);
   const [manifest, setManifest] = useState<any[]>([]);
-  const [filterStopId, setFilterStopId] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showDisclosureModal, setShowDisclosureModal] = useState<boolean>(false);
   const [historyTrips, setHistoryTrips] = useState<any[]>([]);
@@ -636,11 +631,6 @@ export default function DriverDashboard({
   const termSingular = getSectorTerminology(org?.sector, false);
 
   const toggleTrip = async () => {
-    if (!locationConsentAccepted) {
-      toast.error('Please review and accept the location disclosure before starting a trip.');
-      return;
-    }
-
     try {
       if (isTracking) {
         // STOP TRIP
@@ -1260,25 +1250,6 @@ export default function DriverDashboard({
     toast.success("Manifest exported successfully");
   };
 
-  const filteredManifest = manifest.filter((person) => {
-    const matchesStop =
-      filterStopId === "all" || person.pickupPointId === filterStopId;
-
-    let matchesStatus = true;
-    if (filterStatus !== "all") {
-      // In filters, we check either pickup or dropoff status depending on filter selection
-      // Or if it's 'any' we can check both
-      matchesStatus =
-        person.pickupStatus === filterStatus ||
-        person.dropoffStatus === filterStatus;
-    }
-
-    const matchesSearch = person.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    return matchesStop && matchesStatus && matchesSearch;
-  });
-
   return (
     <div className="w-full space-y-4 animate-in fade-in duration-700">
       {/* Active Trip Header */}
@@ -1418,18 +1389,29 @@ export default function DriverDashboard({
               <Navigation className="w-4 h-4 mr-2 text-blue-600" />
               Trip Map
             </h3>
-            <div className="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
-              <Activity className="w-3 h-3 text-blue-500" />
-              <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter italic">
-                Live Map
-              </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchHistory}
+                className="flex items-center gap-1.5 bg-slate-100 text-slate-600 px-2.5 py-1 rounded-xl border border-slate-200 hover:bg-slate-200 transition-colors active:scale-95"
+              >
+                <Calendar className="w-3 h-3" />
+                <span className="text-[8px] font-black uppercase tracking-widest">
+                  History
+                </span>
+              </button>
+              <div className="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                <Activity className="w-3 h-3 text-blue-500" />
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter italic">
+                  Live Map
+                </span>
+              </div>
             </div>
           </div>
           <div className="rounded-[2rem] overflow-hidden border border-slate-100 shadow-xl bg-white h-[400px] relative">
             <MapComponent
               height="100%"
               zoom={15}
-              hideMapStyles={true}
+              hideMapStyles={false}
               center={
                 vehicle?.location &&
                 isValidCoordinate(vehicle.location.lat, vehicle.location.lng)
@@ -1671,130 +1653,6 @@ export default function DriverDashboard({
           </div>
         </div>
 
-        {/* Passenger List */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-2">
-            <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-[0.2em] flex items-center leading-none">
-              <Users className="w-4 h-4 mr-2 text-blue-600" />
-              {termSingular} Status
-            </h3>
-            <div className="flex gap-2">
-              <button
-                onClick={fetchHistory}
-                className="flex items-center gap-2 bg-slate-100 text-slate-600 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-200 transition-colors active:scale-95"
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span className="text-[9px] font-black uppercase tracking-widest">
-                  History
-                </span>
-              </button>
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-2 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors active:scale-95"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span className="text-[9px] font-black uppercase tracking-widest">
-                  Export CSV
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Filters Bar */}
-          <div className="bg-white rounded-3xl border border-slate-100 p-3 shadow-sm space-y-3">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search Name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                />
-              </div>
-              <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-2xl px-2">
-                <Filter className="w-3 h-3 text-slate-400" />
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="bg-transparent text-[8px] font-black uppercase tracking-widest text-slate-600 focus:outline-none py-2"
-                >
-                  <option value="all">Any Status</option>
-                  <option value="waiting">Waiting</option>
-                  <option value="picked">Picked Up</option>
-                  <option value="dropped">Dropped Off</option>
-                  <option value="absent">Absent</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex gap-1 overflow-x-auto scrollbar-hide pb-1">
-              <button
-                onClick={() => setFilterStopId("all")}
-                className={cn(
-                  "px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest whitespace-nowrap transition-all",
-                  filterStopId === "all"
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100 text-slate-400 hover:bg-slate-200",
-                )}
-              >
-                All Stops
-              </button>
-              {sortedStopsList?.map((p: any) => (
-                <button
-                  key={p.id}
-                  onClick={() => setFilterStopId(p.id)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest whitespace-nowrap transition-all",
-                    filterStopId === p.id
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-400 hover:bg-slate-200",
-                  )}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm flex flex-col p-3 space-y-2 max-h-[500px] overflow-y-auto scrollbar-hide">
-            {filteredManifest.length === 0 ? (
-              <div className="py-20 text-center opacity-30 select-none">
-                <Users className="w-16 h-16 mx-auto mb-4" />
-                <p className="text-[10px] font-black tracking-widest uppercase">
-                  No {termPlural.toLowerCase()} found
-                </p>
-              </div>
-            ) : (
-              filteredManifest.map((person) => (
-                <PassengerItem
-                  key={person.id}
-                  name={person.name}
-                  point={
-                    route?.pickupPoints?.find(
-                      (p: any) => p.id === person.pickupPointId,
-                    )?.name || "Point Unassigned"
-                  }
-                  pickupStatus={person.pickupStatus}
-                  dropoffStatus={person.dropoffStatus}
-                  onUpdate={(st: string, type: "pickup" | "dropoff") =>
-                    updateMemberStatus(person.id, st, type)
-                  }
-                  uid={person.uid}
-                  avatarUrl={person.avatarUrl}
-                  isTracking={isTracking}
-                  activeTripType={activeTrip?.direction}
-                />
-              ))
-            )}
-            <div className="pt-6 border-t border-slate-50 mt-4 text-center">
-              <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
-                End of List
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* History Modal */}
@@ -1982,176 +1840,6 @@ export default function DriverDashboard({
         }}
         requiredForRole="driver"
       />
-    </div>
-  );
-}
-
-function PassengerItem({
-  name,
-  point,
-  pickupStatus,
-  dropoffStatus,
-  onUpdate,
-  uid,
-  avatarUrl,
-  isPickupPoint,
-  isTracking,
-  activeTripType,
-}: any) {
-  if (isPickupPoint) {
-    return (
-      <div className="flex items-center justify-between p-4 rounded-3xl bg-blue-50 border border-blue-100 group">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-2xl bg-white border border-blue-200 flex items-center justify-center text-blue-600">
-            <MapPin className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-sm font-black text-blue-900 leading-none mb-1 uppercase italic tracking-tighter">
-              {name}
-            </p>
-            <p className="text-[9px] text-blue-400 font-bold uppercase tracking-widest opacity-60">
-              Bus Stop • {point}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const canUpdatePickup = isTracking && activeTripType === "pickup";
-  const canUpdateDropoff = isTracking && activeTripType === "dropoff";
-
-  return (
-    <div className="flex flex-col gap-3 p-4 rounded-3xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-100 group">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-2xl bg-white border border-slate-200 overflow-hidden shadow-sm group-hover:scale-110 transition-transform duration-500">
-            <img
-              src={getUserAvatar(avatarUrl, undefined, name, uid)}
-              alt="Avatar"
-              className="w-full h-full object-cover"
-            />
-          </div>
-          <div>
-            <p className="text-sm font-black text-slate-900 leading-none mb-1 uppercase italic tracking-tighter">
-              {name}
-            </p>
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest opacity-60">
-              {point}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        {/* Pickup Control */}
-        <div
-          className={cn(
-            "bg-slate-50/50 rounded-2xl p-2 border border-slate-100 transition-opacity",
-            !canUpdatePickup &&
-              isTracking &&
-              "opacity-40 grayscale pointer-events-none",
-            !isTracking && "opacity-40 grayscale pointer-events-none",
-          )}
-        >
-          <div className="flex justify-between items-center mb-2 px-1">
-            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">
-              Pickup Status
-            </p>
-            {!isTracking && <Clock size={8} className="text-slate-300" />}
-          </div>
-          <div className="flex items-center justify-between">
-            {pickupStatus === "waiting" || !pickupStatus ? (
-              <div className="flex gap-1">
-                <button
-                  onClick={() =>
-                    canUpdatePickup && onUpdate("picked", "pickup")
-                  }
-                  disabled={!canUpdatePickup}
-                  className="p-2 bg-white text-green-500 rounded-xl border border-slate-100 shadow-sm active:scale-90 transition-all disabled:opacity-50"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() =>
-                    canUpdatePickup && onUpdate("absent", "pickup")
-                  }
-                  disabled={!canUpdatePickup}
-                  className="p-2 bg-white text-rose-500 rounded-xl border border-slate-100 shadow-sm active:scale-90 transition-all disabled:opacity-50"
-                >
-                  <XCircle className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <span
-                className={cn(
-                  "text-[7px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border w-full text-center",
-                  pickupStatus === "picked"
-                    ? "bg-green-50 text-green-700 border-green-100"
-                    : "bg-rose-50 text-rose-700 border-rose-100",
-                )}
-              >
-                {pickupStatus}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Dropoff Control */}
-        <div
-          className={cn(
-            "bg-slate-50/50 rounded-2xl p-2 border border-slate-100 transition-opacity",
-            !canUpdateDropoff &&
-              isTracking &&
-              "opacity-40 grayscale pointer-events-none",
-            !isTracking && "opacity-40 grayscale pointer-events-none",
-          )}
-        >
-          <div className="flex justify-between items-center mb-2 px-1">
-            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">
-              Dropoff Status
-            </p>
-            {!isTracking && (
-              <Clock size={8} className="text-slate-300 text-right" />
-            )}
-          </div>
-          <div className="flex items-center justify-between">
-            {dropoffStatus === "waiting" || !dropoffStatus ? (
-              <div className="flex gap-1">
-                <button
-                  onClick={() =>
-                    canUpdateDropoff && onUpdate("dropped", "dropoff")
-                  }
-                  disabled={!canUpdateDropoff}
-                  className="p-2 bg-white text-blue-500 rounded-xl border border-slate-100 shadow-sm active:scale-90 transition-all disabled:opacity-50"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() =>
-                    canUpdateDropoff && onUpdate("absent", "dropoff")
-                  }
-                  disabled={!canUpdateDropoff}
-                  className="p-2 bg-white text-rose-500 rounded-xl border border-slate-100 shadow-sm active:scale-90 transition-all disabled:opacity-50"
-                >
-                  <XCircle className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <span
-                className={cn(
-                  "text-[7px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border w-full text-center",
-                  dropoffStatus === "dropped"
-                    ? "bg-blue-50 text-blue-700 border-blue-100"
-                    : "bg-rose-50 text-rose-700 border-rose-100",
-                )}
-              >
-                {dropoffStatus}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

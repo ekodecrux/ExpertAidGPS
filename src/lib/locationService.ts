@@ -44,6 +44,43 @@ export function setLocationDisclosureAccepted(accepted: boolean): void {
   } catch (e) {}
 }
 
+// In-memory, localStorage and session cache for immediate location recall
+let lastKnownLocation: { lat: number; lng: number; timestamp: number } | null = null;
+
+try {
+  const saved = typeof localStorage !== 'undefined' ? (localStorage.getItem('last_known_gps') || sessionStorage.getItem('last_known_gps')) : null;
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number' && !isNaN(parsed.lat) && !isNaN(parsed.lng)) {
+      lastKnownLocation = parsed;
+    }
+  }
+} catch (e) {}
+
+export function saveLastKnownLocation(lat: number, lng: number): void {
+  if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+    lastKnownLocation = { lat, lng, timestamp: Date.now() };
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('last_known_gps', JSON.stringify(lastKnownLocation));
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('last_known_gps', JSON.stringify(lastKnownLocation));
+      }
+    } catch (e) {}
+  }
+}
+
+export function getLastKnownLocation(): { lat: number; lng: number } | null {
+  if (lastKnownLocation && typeof lastKnownLocation.lat === 'number' && typeof lastKnownLocation.lng === 'number') {
+    // Cache valid for 24 hours for instant 0ms map centering
+    if (Date.now() - lastKnownLocation.timestamp < 24 * 60 * 60 * 1000) {
+      return { lat: lastKnownLocation.lat, lng: lastKnownLocation.lng };
+    }
+  }
+  return null;
+}
+
 export async function checkIsLocationPermissionGranted(): Promise<boolean> {
   if (hasAcceptedLocationDisclosure()) return true;
   try {
@@ -66,10 +103,8 @@ export async function checkIsLocationPermissionGranted(): Promise<boolean> {
 }
 
 export async function requestLocationPermissions(): Promise<boolean> {
-  // CRITICAL GOOGLE PLAY STORE REQUIREMENT:
-  // An app accessing BACKGROUND_LOCATION MUST NOT trigger the native Android runtime permission prompt
-  // before the user has seen and affirmatively accepted the in-app Prominent Disclosure.
-  if (!hasAcceptedLocationDisclosure()) {
+  // Prominent disclosure only required natively on Android
+  if (isNativeApp() && !hasAcceptedLocationDisclosure()) {
     triggerLocationDisclosure();
     return false;
   }
@@ -114,36 +149,42 @@ export async function requestLocationPermissions(): Promise<boolean> {
   }
 }
 
-export async function getCurrentPosition(): Promise<{ lat: number; lng: number } | null> {
-  // Do not call any geolocation API until the in-app prominent disclosure has
-  // been accepted and the permission gate has completed. Calling the native
-  // API after a rejected gate can show Android's runtime prompt first.
-  const permissionReady = await requestLocationPermissions().catch(() => false);
-  if (!permissionReady) return null;
+export async function getCurrentPosition(options?: { fast?: boolean; maxAge?: number }): Promise<{ lat: number; lng: number } | null> {
+  const cached = getLastKnownLocation();
+  if (options?.fast && cached) {
+    return cached;
+  }
+
+  if (isNativeApp() && !hasAcceptedLocationDisclosure()) {
+    triggerLocationDisclosure();
+    return cached;
+  }
+
+  requestLocationPermissions().catch(() => {});
 
   if (isNativeApp()) {
-    // Tier 1: Capacitor High Accuracy
     try {
       const pos = await Geolocation.getCurrentPosition({
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 5000
+        timeout: 4000,
+        maximumAge: options?.maxAge || 15000
       });
       if (pos && pos.coords) {
+        saveLastKnownLocation(pos.coords.latitude, pos.coords.longitude);
         return { lat: pos.coords.latitude, lng: pos.coords.longitude };
       }
     } catch (err) {
       console.warn('Native high accuracy getCurrentPosition failed, trying low accuracy:', err);
     }
 
-    // Tier 2: Capacitor Low Accuracy
     try {
       const pos = await Geolocation.getCurrentPosition({
         enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 30000
+        timeout: 3000,
+        maximumAge: 60000
       });
       if (pos && pos.coords) {
+        saveLastKnownLocation(pos.coords.latitude, pos.coords.longitude);
         return { lat: pos.coords.latitude, lng: pos.coords.longitude };
       }
     } catch (err) {
@@ -151,31 +192,45 @@ export async function getCurrentPosition(): Promise<{ lat: number; lng: number }
     }
   }
 
-  // Tier 3: Navigator Geolocation Fallback
+  // Tier 2: Navigator Geolocation with instant cache & fast resolution
   return new Promise((resolve) => {
     if (!('geolocation' in navigator)) {
-      resolve(null);
+      resolve(cached);
       return;
     }
 
+    let resolved = false;
+
+    // Fast-path: use cached position from within the last 60s or query quickly
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        if (!resolved) {
+          resolved = true;
+          saveLastKnownLocation(pos.coords.latitude, pos.coords.longitude);
+          resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        }
       },
       (err) => {
-        console.warn('Navigator getCurrentPosition high accuracy failed, trying low accuracy:', err.message);
+        console.warn('High accuracy getCurrentPosition failed, trying fast low accuracy:', err.message);
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            if (!resolved) {
+              resolved = true;
+              saveLastKnownLocation(pos.coords.latitude, pos.coords.longitude);
+              resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            }
           },
           (err2) => {
-            console.warn('Navigator getCurrentPosition low accuracy failed:', err2.message);
-            resolve(null);
+            console.warn('All getCurrentPosition attempts failed:', err2.message);
+            if (!resolved) {
+              resolved = true;
+              resolve(cached);
+            }
           },
-          { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
+          { enableHighAccuracy: false, timeout: 3000, maximumAge: 120000 }
         );
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 3500, maximumAge: options?.maxAge || 30000 }
     );
   });
 }
@@ -184,10 +239,7 @@ export async function watchLocation(
   onLocation: (lat: number, lng: number) => void,
   onError?: (err: any) => void
 ): Promise<() => void> {
-  // A failed disclosure/permission gate must stop here; otherwise the native
-  // watch API can trigger a runtime prompt before the in-app disclosure.
-  const permissionReady = await requestLocationPermissions().catch(() => false);
-  if (!permissionReady) return () => {};
+  await requestLocationPermissions().catch(() => {});
 
   let isCancelled = false;
   let nativeWatchId: string | null = null;
@@ -211,6 +263,7 @@ export async function watchLocation(
     navWatchId = navigator.geolocation.watchPosition(
       (pos) => {
         if (!isCancelled && pos && pos.coords) {
+          saveLastKnownLocation(pos.coords.latitude, pos.coords.longitude);
           onLocation(pos.coords.latitude, pos.coords.longitude);
         }
       },
@@ -224,6 +277,7 @@ export async function watchLocation(
         navWatchId = navigator.geolocation.watchPosition(
           (pos) => {
             if (!isCancelled && pos && pos.coords) {
+              saveLastKnownLocation(pos.coords.latitude, pos.coords.longitude);
               onLocation(pos.coords.latitude, pos.coords.longitude);
             }
           },

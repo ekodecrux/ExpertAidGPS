@@ -3,9 +3,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { LayoutDashboard, Users, Route, Bus, LogOut, Settings, Bell, Map as MapIcon, ShieldCheck, Briefcase, ChevronLeft, ChevronRight, UserCircle, Users2, MapPin, Building2, School, GraduationCap, Navigation, Activity, X, Edit2, Save, Key, Mail, Shield } from 'lucide-react';
 import { cn, getLocalAvatar, getUserAvatar, getLocalIcon } from '../lib/utils';
 import { Link, useLocation } from 'react-router-dom';
-import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where } from 'firebase/firestore';
 import { sendPasswordResetEmail, updateProfile } from 'firebase/auth';
 import { db, auth as firebaseAuth } from '../lib/firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'react-hot-toast';
 
@@ -63,30 +64,45 @@ export default function AppShell({ children }: ShellProps) {
     let unsubUsers = () => {};
     let unsubTrips = () => {};
 
-    if (userData.role === 'org_admin' || userData.role === 'super_admin') {
+    if (firebaseAuth.currentUser && (userData.role === 'org_admin' || userData.role === 'super_admin')) {
       try {
-        unsubRoutes = onSnapshot(collection(db, 'routes'), (snapshot) => {
+        const isSuper = userData.role === 'super_admin';
+        const targetOrgId = userData.orgId;
+
+        const routesQuery = (isSuper || !targetOrgId)
+          ? collection(db, 'routes')
+          : query(collection(db, 'routes'), where('orgId', '==', targetOrgId));
+
+        const usersQuery = (isSuper || !targetOrgId)
+          ? collection(db, 'users')
+          : query(collection(db, 'users'), where('orgId', '==', targetOrgId));
+
+        const tripsQuery = (isSuper || !targetOrgId)
+          ? collection(db, 'trips')
+          : query(collection(db, 'trips'), where('orgId', '==', targetOrgId));
+
+        unsubRoutes = onSnapshot(routesQuery, (snapshot) => {
           const rList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          const filtered = userData.role === 'super_admin' ? rList : rList.filter((r: any) => r.orgId === userData.orgId);
+          const filtered = isSuper ? rList : rList.filter((r: any) => r.orgId === targetOrgId);
           setRoutes(filtered);
         }, (error) => {
-          console.warn("Routes snapshot read sidelined:", error);
+          console.warn("[AppShell] Firestore routes subscription notice:", error?.message || error);
         });
 
-        unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+        unsubUsers = onSnapshot(usersQuery, (snapshot) => {
           const uList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          const filtered = userData.role === 'super_admin' ? uList : uList.filter((u: any) => u.orgId === userData.orgId);
+          const filtered = isSuper ? uList : uList.filter((u: any) => u.orgId === targetOrgId);
           setUsers(filtered);
         }, (error) => {
-          console.warn("Users snapshot read sidelined:", error);
+          console.warn("[AppShell] Firestore users subscription notice:", error?.message || error);
         });
 
-        unsubTrips = onSnapshot(collection(db, 'trips'), (snapshot) => {
+        unsubTrips = onSnapshot(tripsQuery, (snapshot) => {
           const tList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          const filtered = userData.role === 'super_admin' ? tList : tList.filter((t: any) => t.orgId === userData.orgId);
+          const filtered = isSuper ? tList : tList.filter((t: any) => t.orgId === targetOrgId);
           setTrips(filtered);
         }, (error) => {
-          console.warn("Trips snapshot read sidelined:", error);
+          console.warn("[AppShell] Firestore trips subscription notice:", error?.message || error);
         });
       } catch (fsErr) {
         console.warn("Firestore listener initialization bypassed/failed. Standard MySQL Relational polling active.");
@@ -276,13 +292,19 @@ export default function AppShell({ children }: ShellProps) {
   }, [userData?.name]);
 
   React.useEffect(() => {
-    if (userData?.orgId) {
-      const unsub = onSnapshot(doc(db, 'organizations', userData.orgId), (snap) => {
-        if (snap.exists()) {
-          setOrg({ id: snap.id, ...snap.data() });
-        }
-      });
-      return () => unsub();
+    if (firebaseAuth.currentUser && userData?.orgId) {
+      try {
+        const unsub = onSnapshot(doc(db, 'organizations', userData.orgId), (snap) => {
+          if (snap.exists()) {
+            setOrg({ id: snap.id, ...snap.data() });
+          }
+        }, (error) => {
+          console.warn(`[AppShell] Firestore organizations/${userData.orgId} read notice:`, error?.message || error);
+        });
+        return () => unsub();
+      } catch (err: any) {
+        console.warn(`[AppShell] Organizations subscription notice:`, err?.message);
+      }
     }
   }, [userData?.orgId]);
 

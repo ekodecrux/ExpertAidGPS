@@ -143,6 +143,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (result.success && result.userData) {
             setUserData(result.userData);
             localStorage.setItem(`expert_gps_user_${currentUser.uid}`, JSON.stringify(result.userData));
+
+            // Sync user profile to Firestore doc `users/${currentUser.uid}` so Firestore rules resolve role & orgId
+            if (currentUser.uid) {
+              const uRole = result.userData.role || (currentUser.email === 'ravikumarpendyala9182@gmail.com' ? 'super_admin' : 'org_admin');
+              const uName = (result.userData.name || currentUser.displayName || currentUser.email?.split('@')[0] || 'User').slice(0, 100);
+              const uEmail = currentUser.email || result.userData.email;
+              const uOrgId = result.userData.orgId || 'demo-school';
+
+              setDoc(doc(db, 'users', currentUser.uid), {
+                role: uRole,
+                name: uName,
+                email: uEmail,
+                orgId: uOrgId
+              }, { merge: true }).catch((err) => {
+                console.warn("[AuthContext] Firestore user document sync note:", err?.message || err);
+              });
+            }
           } else {
             setUserData(null);
             setUser(null);

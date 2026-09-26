@@ -3264,7 +3264,7 @@ function StatCard({ label, value, trend, icon: Icon, color }: { label: string, v
         </div>
       </div>
       <div className="flex items-baseline gap-2 min-w-0">
-        <div className="text-2xl font-black text-slate-900 tracking-tighter truncate md:overflow-visible md:whitespace-normal">{value}</div>
+        <div className="text-2xl font-bold text-slate-900 tracking-tight font-sans truncate md:overflow-visible md:whitespace-normal [font-variant-numeric:normal_lining-nums] [font-feature-settings:'zero'_0]">{value}</div>
         {trend && <span className="text-blue-500 text-[10px] font-bold italic ml-auto shrink-0">{trend} Records</span>}
       </div>
     </div>

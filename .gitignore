@@ -7,13 +7,9 @@ coverage/
 *.log
 .env*
 !.env.example
-**/key.properties
 firebase-service-account.json
 *.keystore
 *.jks
-# Requested release-signing files
-!android/app/key.properties
-!android/app/cert/gpstracking.jks
 *.aab
 *.apk
 backups/

@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, isValidCoordinate, getSectorTerminology, getSortedStops, getLocalIcon, cleanMessage, getNotifications } from '../lib/utils';
+import { cn, isValidCoordinate, getSectorTerminology, getSortedStops, getLocalIcon, cleanMessage, getNotifications, calculateArrivalTime } from '../lib/utils';
 
 interface UserDashboardProps {
   userDbData?: any;
@@ -371,7 +371,8 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
           const routeRes = data.routes[0];
           const mins = Math.ceil(routeRes.duration / 60);
           const km = (routeRes.distance / 1000).toFixed(1);
-          setEta(`${mins} MINS`);
+          const arrivalTime = calculateArrivalTime(mins);
+          setEta(`${arrivalTime} (${mins}m)`);
           setDistance(`${km} KM`);
         } else {
           // Fallback direct distance calculation
@@ -379,7 +380,8 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
           if (targetNode && isValidCoordinate(targetNode.lat, targetNode.lng)) {
             const dist = getDistance(vehicle.location.lat, vehicle.location.lng, targetNode.lat, targetNode.lng);
             const estMins = Math.max(1, Math.round(dist * 1.8 + 2));
-            setEta(`${estMins} MINS`);
+            const arrivalTime = calculateArrivalTime(estMins);
+            setEta(`${arrivalTime} (${estMins}m)`);
             setDistance(`${dist.toFixed(1)} KM`);
           } else {
             setEta('--');
