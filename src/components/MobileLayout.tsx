@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Home, Map, Bell, User, Settings as SettingsIcon, Menu, X, LogOut, Shield, Truck, Users, MessageSquare, Clock, Navigation, Compass, CheckCircle, XCircle } from 'lucide-react';
-import { cn, getLocalAvatar, getUserAvatar, getLocalIcon, cleanMessage } from '../lib/utils';
+import { cn, getLocalAvatar, getUserAvatar, getLocalIcon, cleanMessage, getNotifications } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { saveMySQLRecord } from '../lib/mysql';
-import { OrganizationIcon } from './OrganizationLogo';
-import { getOrganizationBranding } from '../config/organizationBranding';
+import { getBackendUrl } from '../lib/apiPatch';
 
 interface MobileLayoutProps {
   children: React.ReactNode;
@@ -40,31 +40,24 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Parse notifications if it's a string (from MySQL serialization)
-  let notifications: any[] = [];
-  if (userData?.notifications) {
-    if (typeof userData.notifications === 'string') {
-      try {
-        notifications = JSON.parse(userData.notifications);
-      } catch (e) {
-        console.warn('Failed to parse notifications string:', e);
-        notifications = [];
-      }
-    } else if (Array.isArray(userData.notifications)) {
-      notifications = userData.notifications;
-    }
-  }
+  const notifications = getNotifications(userData);
   const activeNotifications = notifications.filter((n: any) => !n.dismissed);
   const hasUnread = activeNotifications.length > 0; 
 
   useEffect(() => {
-    if (!userData?.orgId) return;
-    const unsub = onSnapshot(doc(db, 'organizations', userData.orgId), (docSnap) => {
-      if (docSnap.exists()) {
-        setOrg({ id: docSnap.id, ...docSnap.data() });
-      }
-    });
-    return () => unsub();
+    if (!auth.currentUser || !userData?.orgId) return;
+    try {
+      const unsub = onSnapshot(doc(db, 'organizations', userData.orgId), (docSnap) => {
+        if (docSnap.exists()) {
+          setOrg({ id: docSnap.id, ...docSnap.data() });
+        }
+      }, (error) => {
+        console.warn(`[MobileLayout] Firestore organizations/${userData.orgId} read notice:`, error?.message || error);
+      });
+      return () => unsub();
+    } catch (err: any) {
+      console.warn(`[MobileLayout] Organizations subscription notice:`, err?.message);
+    }
   }, [userData?.orgId]);
 
   useEffect(() => {
@@ -72,9 +65,13 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
 
     const fetchOrgFromMySQL = async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        let token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         if (!token) return;
-        const resObj = await fetch('/api/records/user-data', {
+        const backendUrl = getBackendUrl();
+        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -98,23 +95,10 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   }, [userData]);
 
   const handleDismissAll = async () => {
-    if (!userData || !userData.notifications) return;
+    const notifs = getNotifications(userData);
+    if (!userData || notifs.length === 0) return;
     try {
-      // Parse notifications if it's a string
-      let notifArray: any[] = [];
-      if (typeof userData.notifications === 'string') {
-        try {
-          notifArray = JSON.parse(userData.notifications);
-        } catch (e) {
-          console.warn('Failed to parse notifications string:', e);
-          return;
-        }
-      } else if (Array.isArray(userData.notifications)) {
-        notifArray = userData.notifications;
-      } else {
-        return;
-      }
-      const updatedNotifs = notifArray.map(n => ({ ...n, dismissed: true }));
+      const updatedNotifs = notifs.map(n => ({ ...n, dismissed: true }));
       
       // Update both MySQL and Firestore to ensure perfect sync
       await Promise.all([
@@ -149,9 +133,7 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
                   : (org?.sector === 'Government'
                     ? 'museum'
                     : 'commercial'));
-              // Use organization branding config if available, otherwise fall back to org data
-              const branding = org?.id ? getOrganizationBranding(org.id) : null;
-              const logoSrc = branding?.logoIconUrl || org?.logo || org?.logoUrl || getLocalIcon(defaultIcon);
+              const logoSrc = org?.logo || org?.logoUrl || getLocalIcon(defaultIcon);
               return (
                 <img src={logoSrc} alt="Org Logo" className="w-full h-full object-contain p-0.5 bg-slate-50" referrerPolicy="no-referrer" />
               );
@@ -303,25 +285,33 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className={cn(
-        "flex-1 relative",
-        (activeTab === 'map' || activeTab === 'track') ? "overflow-hidden flex flex-col" : "overflow-y-auto"
-      )}>
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+      <main 
+        className={cn(
+          "flex-1 relative flex flex-col min-h-0",
+          (activeTab === 'map' || activeTab === 'track') ? "overflow-hidden" : "overflow-y-auto overscroll-y-contain"
+        )}
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          touchAction: 'pan-y'
+        }}
+      >
+        <div
           className={cn(
-            "p-4 transition-all duration-300",
-            (activeTab === 'map' || activeTab === 'track') ? "h-full relative" : "min-h-full pb-24"
+            "flex-1 flex flex-col relative w-full",
+            (activeTab === 'map' || activeTab === 'track') ? "h-full p-0 overflow-hidden" : "p-3 sm:p-4 min-h-full pb-24 sm:pb-28"
           )}
         >
           {children}
-        </motion.div>
+        </div>
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3 pb-8 flex justify-between items-center z-[5000] shadow-[0_-8px_30px_rgba(0,0,0,0.06)]">
+      <nav 
+        className="bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 sm:px-6 py-2 sm:py-3 flex justify-around items-center z-[5000] shadow-[0_-8px_30px_rgba(0,0,0,0.06)]"
+        style={{
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))'
+        }}
+      >
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -329,20 +319,20 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className="relative flex flex-col items-center gap-1"
+              className="relative flex flex-col items-center gap-0.5 sm:gap-1 py-1 px-2 rounded-xl transition-transform active:scale-95 cursor-pointer touch-manipulation select-none"
             >
               <div className={cn(
-                "p-2 rounded-2xl transition-all duration-300 relative",
-                isActive ? "bg-blue-600 text-white shadow shadow-blue-600/20 scale-105" : "text-slate-400"
+                "p-1.5 sm:p-2 rounded-xl sm:rounded-2xl transition-all duration-150 relative",
+                isActive ? "bg-blue-600 text-white shadow-md shadow-blue-600/30 scale-105" : "text-slate-400 hover:text-slate-600"
               )}>
-                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                <Icon size={19} strokeWidth={isActive ? 2.5 : 2} />
                 {tab.badge && (
-                  <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
                 )}
               </div>
               <span className={cn(
-                "text-[9px] font-black uppercase tracking-tighter transition-all",
-                isActive ? "text-blue-600 opacity-100" : "text-slate-400 opacity-60"
+                "text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-tight transition-colors",
+                isActive ? "text-blue-600 font-extrabold" : "text-slate-400 font-semibold"
               )}>
                 {tab.label}
               </span>

@@ -1,4 +1,5 @@
 import { auth } from './firebase';
+import { getBackendUrl } from './apiPatch';
 
 export async function saveMySQLRecord(operation: 'insert' | 'update' | 'delete', table: string, id: string, data?: any) {
   try {
@@ -8,7 +9,8 @@ export async function saveMySQLRecord(operation: 'insert' | 'update' | 'delete',
     }
     if (!token) throw new Error('Unauthenticated status. Please log in again.');
     
-    const response = await fetch('/api/records/save', {
+    const backendUrl = getBackendUrl();
+    const response = await fetch(`${backendUrl}/api/records/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -49,7 +51,8 @@ export async function saveMySQLRecordsBatch(operations: Array<{ operation: 'inse
     }
     if (!token) throw new Error('Unauthenticated status. Please log in again.');
     
-    const response = await fetch('/api/records/save-batch', {
+    const backendUrl = getBackendUrl();
+    const response = await fetch(`${backendUrl}/api/records/save-batch`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -88,7 +91,8 @@ export async function getMySQLAdminData() {
   }
   if (!token) throw new Error('Unauthenticated');
   
-  const response = await fetch('/api/records/admin-data', {
+  const backendUrl = getBackendUrl();
+  const response = await fetch(`${backendUrl}/api/records/admin-data`, {
     headers: {
       'Authorization': `Bearer ${token}`
     }

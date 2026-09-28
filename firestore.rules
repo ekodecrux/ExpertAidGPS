@@ -9,7 +9,7 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isSignedIn() && (
-        request.auth.token.email.lower() == 'ravikumarpendyala9182@gmail.com' ||
+        request.auth.token.get('email', '').lower() == 'ravikumarpendyala9182@gmail.com' ||
         request.auth.token.get('role', '') == 'super_admin' ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'super_admin')
@@ -25,7 +25,10 @@ service cloud.firestore {
     }
 
     function getUserOrgId() {
-      return request.auth.token.get('orgId', get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('orgId', null));
+      return request.auth.token.keys().contains('orgId') ?
+        request.auth.token.orgId :
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) ?
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('orgId', null) : null);
     }
 
     function isDriver() {
@@ -116,7 +119,7 @@ service cloud.firestore {
     // --- Rules ---
 
     match /organizations/{orgId} {
-      allow get: if isSignedIn() && isValidId(orgId);
+      allow get: if isValidId(orgId);
       allow list: if isSuperAdmin();
       allow create: if isSuperAdmin() && isValidId(orgId) && isValidOrganization(incoming());
       allow update: if (isSuperAdmin() || (isOrgAdmin() && getUserOrgId() == orgId)) && (

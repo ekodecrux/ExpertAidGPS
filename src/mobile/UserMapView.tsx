@@ -3,11 +3,12 @@ import MapComponent, { Marker, Popup, Polyline, vehicleIcon, stationIcon, create
 import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, collection, query, where, limit, getDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { isValidCoordinate, getDistance, cn, getSortedStops, getLocalIcon, cleanMessage } from '../lib/utils';
+import { isValidCoordinate, getDistance, cn, getSortedStops, getLocalIcon, cleanMessage, getNotifications, calculateArrivalTime } from '../lib/utils';
 import { Activity, Navigation, Info, Bell, MapPin, Clock, Shield, Truck, X, CheckCircle, Home } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'react-hot-toast';
 import { saveMySQLRecord } from '../lib/mysql';
+import { getBackendUrl } from '../lib/apiPatch';
 
 interface UserMapViewProps {
   userDbData?: any;
@@ -119,17 +120,24 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
       }
 
       // 7. Set Tracking Vehicle Coordinate
-      if (res.vehicles) {
-        const vehicleIdToFetch = matchedTrip?.vehicleId || matchedRoute?.vehicleId || uData.vehicleId || 'DEV-V1';
-        const matchedVehicle = res.vehicles.find((v: any) => v.id === vehicleIdToFetch);
+      if (res.vehicles && res.vehicles.length > 0) {
+        const matchedVehicle = res.vehicles.find((v: any) => v && (
+          v.id === matchedTrip?.vehicleId ||
+          v.id === matchedRoute?.vehicleId ||
+          v.id === uData?.vehicleId ||
+          v.id === driverVehicleId ||
+          (driver && v.driverId === driver.uid) ||
+          (matchedRoute && v.routeId === matchedRoute.id)
+        )) || res.vehicles[0];
+
         if (matchedVehicle) {
           const locObj = (matchedVehicle.latitude !== null && matchedVehicle.longitude !== null && matchedVehicle.latitude !== undefined && matchedVehicle.longitude !== undefined)
             ? { lat: Number(matchedVehicle.latitude), lng: Number(matchedVehicle.longitude) }
-            : (typeof matchedVehicle.location === 'string' ? (() => { try { return JSON.parse(matchedVehicle.location); } catch(e) { return null; } })() : matchedVehicle.location || null);
+            : (typeof matchedVehicle.location === 'string' ? (() => { try { return JSON.parse(matchedVehicle.location); } catch(e) { return null; } })() : matchedVehicle.location || org?.location || null);
 
           setVehicle({
             ...matchedVehicle,
-            plateNumber: matchedVehicle.plateNumber || matchedVehicle.number || "",
+            plateNumber: matchedVehicle.plateNumber || matchedVehicle.number || "BUS-01",
             location: locObj
           });
         }
@@ -155,9 +163,13 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
 
     const fetchMySQLMobileData = async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        let token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         if (!token) return;
-        const resObj = await fetch('/api/records/user-data', {
+        const backendUrl = getBackendUrl();
+        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -190,10 +202,10 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
 
   const addNotification = async (message: string, type?: string) => {
     if (!userData) return;
-    const uData = userData as any;
+    const currentNotifs = getNotifications(userData);
     
     // Check if this specific notification already exists in the doc to avoid DB bloat
-    const alreadyNotified = uData.notifications?.some((n: any) => 
+    const alreadyNotified = currentNotifs.some((n: any) => 
       n.message === message && 
       (new Date().getTime() - new Date(n.timestamp).getTime() < 3600000) // Within last hour
     );
@@ -203,9 +215,8 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
     }
 
     try {
-      const existingNotifs = Array.isArray(uData.notifications) ? uData.notifications : [];
       const updatedNotifs = [
-        ...existingNotifs,
+        ...currentNotifs,
         {
           message,
           type: type || 'general',
@@ -367,10 +378,12 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
     : 0;
   
   // ETA to User Stop
+  const userStopMins = Math.max(1, Math.round(distanceToUserStop * 1.8 + 1));
+  const userStopArrival = calculateArrivalTime(userStopMins);
   const etaToUserStopStr = distanceToUserStop > 0 
     ? (distanceToUserStop < 0.1 
         ? 'Arrived' 
-        : `${Math.max(1, Math.round(distanceToUserStop * 1.8 + 1))} Mins (${distanceToUserStop.toFixed(1)} KM)`)
+        : `${userStopArrival} (${userStopMins} Mins • ${distanceToUserStop.toFixed(1)} KM)`)
     : '-- mins (-- KM)';
 
   // Distance to Organization
@@ -379,10 +392,12 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
     : 0;
 
   // ETA to Organization
+  const orgMins = Math.max(1, Math.round(distanceToOrg * 1.8 + 2));
+  const orgArrival = calculateArrivalTime(orgMins);
   const etaToOrgStr = distanceToOrg > 0
     ? (distanceToOrg < 0.1
         ? 'Arrived'
-        : `${Math.max(1, Math.round(distanceToOrg * 1.8 + 2))} Mins (${distanceToOrg.toFixed(1)} KM)`)
+        : `${orgArrival} (${orgMins} Mins • ${distanceToOrg.toFixed(1)} KM)`)
     : '-- mins (-- KM)';
 
   // Road-aware Routing Logic via OSRM
@@ -503,7 +518,12 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
             setRoadPolyline(pathCoords);
             
             const durationMins = Math.round(data.routes[0].duration / 60);
-            setEta(durationMins > 0 ? `${durationMins} Mins` : 'Arriving');
+            if (durationMins > 0) {
+              const arrivalTime = calculateArrivalTime(durationMins);
+              setEta(`${arrivalTime} (${durationMins} Mins)`);
+            } else {
+              setEta('Arriving');
+            }
             return;
           }
         } catch (error) {
@@ -512,6 +532,11 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
       }
 
       setRoadPolyline(uniqueCoords.map(c => [c[1], c[0]] as [number, number]));
+      const fallbackMins = (isPickupHandled || isDropoffHandled) ? orgMins : userStopMins;
+      if (fallbackMins > 0) {
+        const fallbackArrival = calculateArrivalTime(fallbackMins);
+        setEta(`${fallbackArrival} (${fallbackMins} Mins)`);
+      }
     };
 
     const timer = setTimeout(fetchRoute, 500);
@@ -546,7 +571,8 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
     <motion.div 
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="space-y-6 relative h-full flex flex-col"
+      className="space-y-6 relative flex flex-col pb-12 w-full max-w-full"
+      style={{ touchAction: 'pan-y' }}
     >
       <div className="flex items-center justify-between px-2 gap-2 mb-4">
         <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter italic leading-tight flex-shrink-0">Track your Bus</h2>
@@ -571,7 +597,7 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
         </div>
       </div>
 
-      <div className="-mx-4 overflow-hidden border-y border-slate-100 shadow-2xl bg-white relative h-[45vh] min-h-[400px]">
+      <div className="overflow-hidden border border-slate-200/80 rounded-3xl shadow-2xl bg-white relative h-[380px] sm:h-[420px] w-full flex-shrink-0">
         <MapComponent 
           height="100%" 
           zoom={14} 
@@ -665,12 +691,12 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-bl-full -mr-10 -mt-10 group-hover:scale-125 transition-transform duration-700"></div>
            <div className="relative z-10 space-y-4">
               <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+                 <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
                     <Clock size={20} />
                  </div>
-                 <div>
+                 <div className="min-w-0 flex-1">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Estimated Arrival</p>
-                    <p className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">
+                    <p className="text-xl sm:text-2xl font-black text-slate-900 uppercase italic tracking-tighter break-words leading-tight">
                       {activeTrip ? (isPickupHandled || isDropoffHandled ? 'Arrived/Done' : eta) : 'PENDING'}
                     </p>
                  </div>
@@ -682,12 +708,14 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-600/5 rounded-bl-full -mr-10 -mt-10 group-hover:scale-125 transition-transform duration-700"></div>
            <div className="relative z-10 space-y-4">
               <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                 <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0">
                     <MapPin size={20} />
                  </div>
-                 <div>
+                 <div className="min-w-0 flex-1">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Current Route</p>
-                    <p className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter truncate max-w-[150px]">{route?.name || 'SELECTING...'}</p>
+                    <p className="text-xl sm:text-2xl font-black text-slate-900 uppercase italic tracking-tighter break-words leading-tight">
+                      {route?.name || 'SELECTING...'}
+                    </p>
                  </div>
               </div>
            </div>
@@ -730,22 +758,22 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
             </button>
           </div>
 
-          <div className="px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100/50 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+          <div className="px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100/50 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
                 <Navigation size={14} className="animate-pulse" />
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
                   {infoTarget === 'org' ? 'To Organization / Hub' : 'To Your Registered Stop'}
                 </p>
-                <p className="text-[10px] font-bold text-slate-800 uppercase tracking-tight">
+                <p className="text-[10px] font-bold text-slate-800 uppercase tracking-tight break-words">
                   {infoTarget === 'org' ? (org?.name || 'Main Office') : (userStop?.name || 'Your Stop')}
                 </p>
               </div>
             </div>
             
-            <div className="text-right">
+            <div className="text-right flex-shrink-0">
               <p className="text-sm font-black text-slate-900 tracking-tight italic">
                 {infoTarget === 'org' ? etaToOrgStr : etaToUserStopStr}
               </p>
@@ -761,15 +789,15 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
       <div className="bg-white p-8 rounded-[3rem] shadow-2xl border border-slate-100 relative overflow-hidden group">
          <div className="absolute top-0 right-0 w-40 h-40 bg-blue-600/5 rounded-bl-[4rem] -mr-10 -mt-10 group-hover:scale-110 transition-transform duration-700"></div>
          <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-            <div className="flex items-center gap-5">
-               <div className="w-16 h-16 rounded-[1.5rem] bg-blue-50 flex items-center justify-center text-blue-600 shadow-inner border border-blue-100/50">
+            <div className="flex items-center gap-5 min-w-0 flex-1">
+               <div className="w-16 h-16 rounded-[1.5rem] bg-blue-50 flex items-center justify-center text-blue-600 shadow-inner border border-blue-100/50 flex-shrink-0">
                   <MapPin size={32} strokeWidth={2.5} />
                </div>
-               <div className="space-y-1">
+               <div className="space-y-1 min-w-0 flex-1">
                   <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.25em] leading-none mb-1">
                     {(tripDirection === 'pickup' && isPickupHandled) ? (pickupStatus === 'absent' ? 'Absent Today' : 'Heading To Destination') : (tripDirection === 'dropoff' && isDropoffHandled) ? 'Trip Finished' : 'Your Collection Point'}
                   </p>
-                  <h3 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">
+                  <h3 className="text-2xl sm:text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-tight break-words">
                     {(tripDirection === 'pickup' && isPickupHandled) ? 'Main Center' : (tripDirection === 'dropoff' && isDropoffHandled) ? (dropoffStatus === 'absent' ? 'Home (Absent)' : 'Home') : (userStop?.name || 'Searching...')}
                   </h3>
                </div>
@@ -797,7 +825,7 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[2000] bg-slate-900/40 backdrop-blur-sm -m-4 flex flex-col justify-end p-4"
+            className="fixed inset-0 z-[2000] bg-slate-900/40 backdrop-blur-sm flex flex-col justify-end p-0 sm:p-4"
           >
             <motion.div 
               initial={{ y: "100%" }}
@@ -813,8 +841,8 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
               </div>
               
               <div className="space-y-4">
-                {uData?.notifications?.length > 0 ? (
-                  uData.notifications.slice().reverse().map((n: any, i: number) => {
+                {getNotifications(userData).length > 0 ? (
+                  getNotifications(userData).slice().reverse().map((n: any, i: number) => {
                     const messageCleaned = cleanMessage(n.message);
                     const isStart = n.type === 'trip_start' || n.type === 'start' || n.message?.toLowerCase().includes('started');
                     const isEnd = n.type === 'trip_end' || n.type === 'end' || n.message?.toLowerCase().includes('completed');

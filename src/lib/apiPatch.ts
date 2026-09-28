@@ -2,27 +2,50 @@
 // This prevents Capacitor from intercepting relative calls and returning the offline index.html file (causing JSON parse errors)
 
 export function isNativeApp(): boolean {
-  const saved = localStorage.getItem('API_BASE_URL');
-  if (saved) return true;
+  if (typeof window === 'undefined') return false;
 
-  const currentOrigin = window.location.origin;
+  const currentOrigin = window.location.origin || '';
+  const href = window.location.href || '';
   
   const isCapacitor = 
-    (window as any).Capacitor || 
+    !!(window as any).Capacitor || 
     navigator.userAgent.toLowerCase().includes('capacitor') || 
-    currentOrigin.startsWith('capacitor://');
+    currentOrigin.startsWith('capacitor://') ||
+    href.startsWith('capacitor://') ||
+    currentOrigin.startsWith('file://') ||
+    href.startsWith('file://');
 
-  return !!isCapacitor;
+  return isCapacitor;
 }
 
+export const DEFAULT_PRODUCTION_URL = 'https://expertaidgps-utabsjvh.manus.space';
+
 export function getBackendUrl(): string {
-  const saved = localStorage.getItem('API_BASE_URL');
-  if (saved) {
-    return saved.trim().replace(/\/$/, '');
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('API_BASE_URL');
+    if (saved && saved.trim()) {
+      return saved.trim().replace(/\/$/, '');
+    }
   }
 
-  // Default to the deployed web server
-  return 'https://expertaidgps-utabsjvh.manus.space';
+  // For native apps (Capacitor/Android), use default production URL if not overridden
+  if (isNativeApp()) {
+    console.log('[getBackendUrl] Native app detected, using production URL:', DEFAULT_PRODUCTION_URL);
+    return DEFAULT_PRODUCTION_URL;
+  }
+
+  if ((import.meta as any).env?.VITE_API_BASE_URL) {
+    const envUrl = ((import.meta as any).env.VITE_API_BASE_URL as string).trim().replace(/\/$/, '');
+    if (envUrl) {
+      return envUrl;
+    }
+  }
+
+  if (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin.startsWith('http')) {
+    return window.location.origin;
+  }
+
+  return DEFAULT_PRODUCTION_URL;
 }
 
 export function setBackendUrl(url: string) {
@@ -31,51 +54,62 @@ export function setBackendUrl(url: string) {
   } else {
     let cleanUrl = url.trim();
     if (!/^https?:\/\//i.test(cleanUrl)) {
-      cleanUrl = 'http://' + cleanUrl;
+      cleanUrl = 'https://' + cleanUrl;
     }
-    localStorage.setItem('API_BASE_URL', cleanUrl);
+    localStorage.setItem('API_BASE_URL', cleanUrl.replace(/\/$/, ''));
   }
 }
 
 // Monkey-patch window.fetch using Object.defineProperty to bypass read-only getter restrictions
-try {
-  const originalFetch = window.fetch;
-  Object.defineProperty(window, 'fetch', {
-    value: function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-      if (!isNativeApp()) {
-        // In normal browser environments (development & shared preview iframe), pass through directly
-        // This prevents CORS and Request cloning errors and ensures original fetch behavior
-        return originalFetch(input, init);
-      }
+const originalFetch = window.fetch;
 
-      let url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url);
+Object.defineProperty(window, 'fetch', {
+  value: function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    let urlStr = '';
 
-      if (url.startsWith('/api/')) {
-        const base = getBackendUrl();
-        const cleanPath = url.startsWith('/') ? url : '/' + url;
-        url = `${base}${cleanPath}`;
-      }
+    if (typeof input === 'string') {
+      urlStr = input;
+    } else if (input instanceof URL) {
+      urlStr = input.toString();
+    } else if (input && typeof (input as any).url === 'string') {
+      urlStr = (input as any).url;
+    }
+
+    let isApiCall = false;
+    let apiPath = '';
+
+    if (urlStr.startsWith('/api/')) {
+      isApiCall = true;
+      apiPath = urlStr;
+    } else if (urlStr.startsWith('api/')) {
+      isApiCall = true;
+      apiPath = '/' + urlStr;
+    }
+
+    const customBaseUrl = typeof window !== 'undefined' ? localStorage.getItem('API_BASE_URL') : null;
+    const shouldRewrite = isApiCall && (isNativeApp() || (!!customBaseUrl && customBaseUrl.trim().length > 0));
+
+    if (shouldRewrite) {
+      const baseUrl = getBackendUrl();
+      const targetUrl = `${baseUrl}${apiPath}`;
 
       if (typeof input === 'string') {
-        return originalFetch(url, init);
+        return originalFetch(targetUrl, init);
       } else if (input instanceof URL) {
-        return originalFetch(new URL(url), init);
+        return originalFetch(new URL(targetUrl), init);
       } else {
-        // If input is a Request object, clone it with the updated URL
         try {
-          const newRequest = new Request(url, input as Request);
-          return originalFetch(newRequest, init);
+          const newReq = new Request(targetUrl, input as Request);
+          return originalFetch(newReq, init);
         } catch (e) {
-          // Fallback
-          return originalFetch(url, init);
+          return originalFetch(targetUrl, init);
         }
       }
-    },
-    writable: true,
-    configurable: true,
-    enumerable: true
-  });
-} catch (e) {
-  console.warn('Failed to monkey-patch fetch:', e);
-  // Continue anyway - fetch will work normally
-}
+    }
+
+    return originalFetch(input, init);
+  },
+  writable: true,
+  configurable: true,
+  enumerable: true
+});

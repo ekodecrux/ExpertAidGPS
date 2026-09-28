@@ -4,6 +4,7 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import toast from 'react-hot-toast';
+import { getBackendUrl } from '../lib/apiPatch';
 
 interface UserData {
   uid: string;
@@ -37,10 +38,71 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function sanitizeUserData(data: any): any {
+  if (!data) return null;
+  let notifications = data.notifications;
+  if (typeof notifications === 'string') {
+    try {
+      notifications = JSON.parse(notifications);
+    } catch (e) {
+      notifications = [];
+    }
+  }
+  if (!Array.isArray(notifications)) {
+    notifications = [];
+  }
+  return {
+    ...data,
+    notifications
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [userData, setUserData] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<FirebaseUser | null>(() => {
+    try {
+      const fallbackToken = localStorage.getItem("expert_gps_fallback_token");
+      const fallbackUserStr = localStorage.getItem("expert_gps_fallback_user");
+      if (fallbackToken && fallbackUserStr) {
+        const fUser = JSON.parse(fallbackUserStr);
+        return {
+          uid: fUser.uid,
+          email: fUser.email,
+          displayName: fUser.name,
+          getIdToken: async () => fallbackToken
+        } as any;
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  const [userDataState, setUserDataState] = useState<UserData | null>(() => {
+    try {
+      const fallbackUserStr = localStorage.getItem("expert_gps_fallback_user");
+      if (fallbackUserStr) {
+        const fUser = JSON.parse(fallbackUserStr);
+        if (fUser?.uid) {
+          const cached = localStorage.getItem(`expert_gps_user_${fUser.uid}`);
+          if (cached) return sanitizeUserData(JSON.parse(cached));
+          return sanitizeUserData(fUser);
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  const setUserData = (data: any) => setUserDataState(sanitizeUserData(data));
+  const userData = userDataState;
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      const fallbackToken = localStorage.getItem("expert_gps_fallback_token");
+      const fallbackUserStr = localStorage.getItem("expert_gps_fallback_user");
+      if (fallbackToken && fallbackUserStr) {
+        return false;
+      }
+    } catch (e) {}
+    return true;
+  });
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -88,9 +150,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         try {
           if (!token) {
-            token = await currentUser.getIdToken(true);
+            token = await currentUser.getIdToken(false);
           }
-          const response = await fetch('/api/auth/verify-user', {
+          const backendUrl = getBackendUrl();
+          const response = await fetch(`${backendUrl}/api/auth/verify-user`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -101,15 +164,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!response.ok) {
             const errResult = await response.json().catch(() => ({ error: 'Verification failed' }));
             console.warn("User verification check failed:", errResult.error);
-            setUserData(null);
-            setUser(null);
-            localStorage.removeItem("expert_gps_fallback_token");
-            localStorage.removeItem("expert_gps_fallback_user");
-            if (auth.currentUser) {
-              await signOut(auth).catch(() => {});
-            }
-            if (!isSigningIn) {
-              toast.error(errResult.error || "Access Denied.");
+            // If we have cached user data, retain the session instead of kicking out the user
+            const cachedDataStr = localStorage.getItem(`expert_gps_user_${currentUser.uid}`) || localStorage.getItem("expert_gps_fallback_user");
+            if (cachedDataStr) {
+              try {
+                const cachedUserData = JSON.parse(cachedDataStr);
+                setUserData(cachedUserData);
+              } catch (e) {}
+            } else if (response.status === 401 || response.status === 403) {
+              setUserData(null);
+              setUser(null);
+              localStorage.removeItem("expert_gps_fallback_token");
+              localStorage.removeItem("expert_gps_fallback_user");
+              if (auth.currentUser) {
+                await signOut(auth).catch(() => {});
+              }
+              if (!isSigningIn) {
+                toast.error(errResult.error || "Access Denied.");
+              }
             }
             setLoading(false);
             return;
@@ -119,6 +191,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (result.success && result.userData) {
             setUserData(result.userData);
             localStorage.setItem(`expert_gps_user_${currentUser.uid}`, JSON.stringify(result.userData));
+
+            // Sync user profile to Firestore doc `users/${currentUser.uid}` so Firestore rules resolve role & orgId
+            if (currentUser.uid) {
+              const uRole = result.userData.role || (currentUser.email === 'ravikumarpendyala9182@gmail.com' ? 'super_admin' : 'org_admin');
+              const uName = (result.userData.name || currentUser.displayName || currentUser.email?.split('@')[0] || 'User').slice(0, 100);
+              const uEmail = currentUser.email || result.userData.email;
+              const uOrgId = result.userData.orgId || 'demo-school';
+
+              setDoc(doc(db, 'users', currentUser.uid), {
+                role: uRole,
+                name: uName,
+                email: uEmail,
+                orgId: uOrgId
+              }, { merge: true }).catch((err) => {
+                console.warn("[AuthContext] Firestore user document sync note:", err?.message || err);
+              });
+            }
           } else {
             setUserData(null);
             setUser(null);
@@ -134,39 +223,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setLoading(false);
         } catch (error: any) {
-          console.error("Error verifying user session:", error);
-          const isSignin = sessionStorage.getItem('is_signing_in') === 'true';
-          const cachedDataStr = localStorage.getItem(`expert_gps_user_${currentUser.uid}`);
+          console.warn("Network notice during user session verification (retaining offline session):", error);
+          const cachedDataStr = localStorage.getItem(`expert_gps_user_${currentUser.uid}`) || localStorage.getItem("expert_gps_fallback_user");
           if (cachedDataStr) {
             try {
               const cachedUserData = JSON.parse(cachedDataStr);
               setUserData(cachedUserData);
-              if (!isSignin) {
-                toast.success("Using local session (Server/Network glitch recovered)");
-              }
-            } catch (err) {
-              setUserData(null);
-              setUser(null);
-              localStorage.removeItem("expert_gps_fallback_token");
-              localStorage.removeItem("expert_gps_fallback_user");
-              if (auth.currentUser) {
-                await signOut(auth).catch(() => {});
-              }
-              if (!isSignin) {
-                toast.error("Session verification failed.");
-              }
-            }
-          } else {
-            setUserData(null);
-            setUser(null);
-            localStorage.removeItem("expert_gps_fallback_token");
-            localStorage.removeItem("expert_gps_fallback_user");
-            if (auth.currentUser) {
-              await signOut(auth).catch(() => {});
-            }
-            if (!isSignin) {
-              toast.error("Session verification failed.");
-            }
+            } catch (err) {}
           }
           setLoading(false);
         }
@@ -183,10 +246,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    // Periodic polling to keep user data, status, and notifications perfectly live & synchronous!
+    // Periodic polling to keep user data live and synchronous
     const interval = setInterval(() => {
       refreshUserData();
-    }, 3000);
+    }, 10000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -198,7 +261,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await signInWithPopup(auth, provider);
       
       const token = await res.user.getIdToken(true);
-      const verifyRes = await fetch('/api/auth/verify-user', {
+      const backendUrl = getBackendUrl();
+      const verifyRes = await fetch(`${backendUrl}/api/auth/verify-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -241,7 +305,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let apiUserData: any = null;
 
       // Custom Express local authentication POST directly to MySQL
-      const loginRes = await fetch('/api/auth/login', {
+      const backendUrl = getBackendUrl();
+      const loginRes = await fetch(`${backendUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -250,11 +315,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!loginRes.ok) {
-        const errorResult = await loginRes.json().catch(() => ({ error: 'Authentication failed.' }));
+        let errorResult: any = { error: 'Authentication failed.' };
+        try {
+          const contentType = loginRes.headers.get('content-type');
+          const responseText = await loginRes.text();
+          if (contentType && contentType.includes('application/json')) {
+            try {
+              errorResult = JSON.parse(responseText);
+            } catch {
+              errorResult = { error: responseText };
+            }
+          } else {
+            if (responseText.includes('<!doctype') || responseText.includes('<html')) {
+              throw new Error('Backend server error: The backend API is not responding correctly. Please ensure the backend service is running.');
+            }
+            errorResult = { error: responseText || 'Authentication failed.' };
+          }
+        } catch (parseErr: any) {
+          if (parseErr.message.includes('Backend server')) {
+            throw parseErr;
+          }
+          throw new Error('Invalid response from backend. Please check server connection.');
+        }
         throw new Error(errorResult.error || "Failed to authenticate.");
       }
 
-      const loginResult = await loginRes.json();
+      let loginResult: any;
+      try {
+        const contentType = loginRes.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          loginResult = await loginRes.json();
+        } else {
+          const text = await loginRes.text();
+          if (text.includes('<!doctype') || text.includes('<html')) {
+            throw new Error('Backend server error: The backend API is not responding correctly. Please ensure the backend service is running.');
+          }
+          throw new Error('Backend returned non-JSON response.');
+        }
+      } catch (parseErr: any) {
+        throw new Error(parseErr.message || 'Failed to parse backend response.');
+      }
+
       if (!loginResult.success) {
         throw new Error(loginResult.error || "Failed to authenticate.");
       }
@@ -313,7 +414,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    const res = await fetch("/api/auth/forgot-password", {
+    const backendUrl = getBackendUrl();
+    const res = await fetch(`${backendUrl}/api/auth/forgot-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -329,8 +431,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUserData = async () => {
     if (!user) return;
     try {
-      const token = await user.getIdToken(true);
-      const response = await fetch('/api/auth/verify-user', {
+      const token = await user.getIdToken(false);
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/api/auth/verify-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

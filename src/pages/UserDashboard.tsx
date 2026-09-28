@@ -6,7 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, isValidCoordinate, getSectorTerminology, getSortedStops, getLocalIcon, cleanMessage } from '../lib/utils';
+import { cn, isValidCoordinate, getSectorTerminology, getSortedStops, getLocalIcon, cleanMessage, getNotifications, calculateArrivalTime } from '../lib/utils';
+import { getBackendUrl } from '../lib/apiPatch';
 
 interface UserDashboardProps {
   userDbData?: any;
@@ -43,27 +44,11 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
 
   useEffect(() => {
     if (!userData) return;
-    const uData = userData as any;
-    
-    // Parse notifications if it's a string
-    let notifArray: any[] = [];
-    if (uData.notifications) {
-      if (typeof uData.notifications === 'string') {
-        try {
-          notifArray = JSON.parse(uData.notifications);
-        } catch (e) {
-          console.warn('Failed to parse notifications string:', e);
-          notifArray = [];
-        }
-      } else if (Array.isArray(uData.notifications)) {
-        notifArray = uData.notifications;
-      }
-    }
-    
-    if (!notifArray || notifArray.length === 0) return;
+    const notifs = getNotifications(userData);
+    if (notifs.length === 0) return;
 
     // Check recent notifications for any new undismissed ones
-    notifArray.forEach((notif: any) => {
+    notifs.forEach((notif: any) => {
       if (notif.dismissed) return;
       
       const notifTime = new Date(notif.timestamp).getTime();
@@ -387,7 +372,8 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
           const routeRes = data.routes[0];
           const mins = Math.ceil(routeRes.duration / 60);
           const km = (routeRes.distance / 1000).toFixed(1);
-          setEta(`${mins} MINS`);
+          const arrivalTime = calculateArrivalTime(mins);
+          setEta(`${arrivalTime} (${mins}m)`);
           setDistance(`${km} KM`);
         } else {
           // Fallback direct distance calculation
@@ -395,7 +381,8 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
           if (targetNode && isValidCoordinate(targetNode.lat, targetNode.lng)) {
             const dist = getDistance(vehicle.location.lat, vehicle.location.lng, targetNode.lat, targetNode.lng);
             const estMins = Math.max(1, Math.round(dist * 1.8 + 2));
-            setEta(`${estMins} MINS`);
+            const arrivalTime = calculateArrivalTime(estMins);
+            setEta(`${arrivalTime} (${estMins}m)`);
             setDistance(`${dist.toFixed(1)} KM`);
           } else {
             setEta('--');
@@ -481,19 +468,25 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
       }
 
       // 4. Vehicle & location tracking resolution
-      const derivedVId = matchedTrip?.vehicleId || matchedRouteObj?.vehicleId || (userData as any)?.vehicleId || 'DEV-V1';
-      setTargetVehicleId(derivedVId);
+      if (res.vehicles && res.vehicles.length > 0) {
+        const assignedDriver = res.users?.find((u: any) => u.role === 'driver' && (u.routeId === routeId || u.uid === matchedTrip?.driverId));
+        const matchedVehicle = res.vehicles.find((v: any) => v && (
+          v.id === matchedTrip?.vehicleId ||
+          v.id === matchedRouteObj?.vehicleId ||
+          v.id === (userData as any)?.vehicleId ||
+          (assignedDriver && (v.driverId === assignedDriver.uid || v.id === assignedDriver.vehicleId)) ||
+          (matchedRouteObj && v.routeId === matchedRouteObj.id)
+        )) || res.vehicles[0];
 
-      if (derivedVId && res.vehicles) {
-        const matchedVehicle = res.vehicles.find((v: any) => v.id === derivedVId);
         if (matchedVehicle) {
+          setTargetVehicleId(matchedVehicle.id);
           const locObj = (matchedVehicle.latitude !== null && matchedVehicle.longitude !== null && matchedVehicle.latitude !== undefined && matchedVehicle.longitude !== undefined)
             ? { lat: Number(matchedVehicle.latitude), lng: Number(matchedVehicle.longitude) }
-            : (typeof matchedVehicle.location === 'string' ? (() => { try { return JSON.parse(matchedVehicle.location); } catch(e) { return null; } })() : matchedVehicle.location || null);
+            : (typeof matchedVehicle.location === 'string' ? (() => { try { return JSON.parse(matchedVehicle.location); } catch(e) { return null; } })() : matchedVehicle.location || org?.location || null);
           
           setVehicle({
             ...matchedVehicle,
-            plateNumber: matchedVehicle.plateNumber || matchedVehicle.number || "",
+            plateNumber: matchedVehicle.plateNumber || matchedVehicle.number || "BUS-01",
             location: locObj,
             isRealtime: true
           });
@@ -520,9 +513,13 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
 
     const fetchMySQLUserDashboardData = async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        let token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         if (!token) return;
-        const resObj = await fetch('/api/records/user-data', {
+        const backendUrl = getBackendUrl();
+        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -842,49 +839,20 @@ export default function UserDashboard({ userDbData, userDbDataLoading }: UserDas
               Live Feed
             </h4>
             <div className="h-px flex-1 mx-4 bg-slate-800"></div>
-            {(() => {
-              let notifArray: any[] = [];
-              if ((userData as any)?.notifications) {
-                if (typeof (userData as any).notifications === 'string') {
-                  try {
-                    notifArray = JSON.parse((userData as any).notifications);
-                  } catch (e) {
-                    notifArray = [];
-                  }
-                } else if (Array.isArray((userData as any).notifications)) {
-                  notifArray = (userData as any).notifications;
-                }
-              }
-              const unreadCount = notifArray.filter((n: any) => !n.dismissed).length;
-              return unreadCount > 0 && (
-                <span className="text-[9px] font-black bg-blue-600/20 text-blue-400 px-2.5 py-1 rounded-full uppercase tracking-widest border border-blue-600/30">
-                  {unreadCount} New
-                </span>
-              );
-            })()}
+            {getNotifications(userData).filter((n: any) => !n.dismissed).length > 0 && (
+              <span className="text-[9px] font-black bg-blue-600/20 text-blue-400 px-2.5 py-1 rounded-full uppercase tracking-widest border border-blue-600/30">
+                {getNotifications(userData).filter((n: any) => !n.dismissed).length} New
+              </span>
+            )}
           </div>
           <div className="space-y-4">
-            {(() => {
-              let notifArray: any[] = [];
-              if ((userData as any)?.notifications) {
-                if (typeof (userData as any).notifications === 'string') {
-                  try {
-                    notifArray = JSON.parse((userData as any).notifications);
-                  } catch (e) {
-                    notifArray = [];
-                  }
-                } else if (Array.isArray((userData as any).notifications)) {
-                  notifArray = (userData as any).notifications;
-                }
-              }
-              return notifArray.length > 0 ? (
-                notifArray.slice(-3).reverse().map((n: any, i: number) => (
-                  <AlertItem key={i} text={cleanMessage(n.message)} time={new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toUpperCase()} />
-                ))
-              ) : (
-                <p className="text-[10px] text-slate-500 font-black uppercase text-center py-4">No recent activity</p>
-              );
-            })()}
+            {getNotifications(userData).length > 0 ? (
+              getNotifications(userData).slice(-3).reverse().map((n: any, i: number) => (
+                <AlertItem key={i} text={cleanMessage(n.message)} time={new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toUpperCase()} />
+              ))
+            ) : (
+              <p className="text-[10px] text-slate-500 font-black uppercase text-center py-4">No recent activity</p>
+            )}
           </div>
           
           <button className="w-full mt-8 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors group/btn">

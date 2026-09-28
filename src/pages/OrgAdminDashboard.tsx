@@ -9,7 +9,9 @@ import MapComponent, { Marker, Popup, vehicleIcon, stationIcon, terminalIcon, cr
 import { useAuth } from '../contexts/AuthContext';
 import { doc, onSnapshot, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, updateDoc, orderBy, setDoc, arrayUnion, arrayRemove, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { saveMySQLRecord } from '../lib/mysql';
+import { getBackendUrl } from '../lib/apiPatch';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
@@ -196,9 +198,13 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
   // High-performance data-refresh mechanism driven entirely and end-to-end by MySQL (bypassing Firestore)
   const fetchMySQLData = async () => {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      let token = await auth.currentUser?.getIdToken().catch(() => null);
+      if (!token) {
+        token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+      }
       if (!token) return;
-      const resObj = await fetch('/api/records/admin-data', {
+      const backendUrl = getBackendUrl();
+      const resObj = await fetch(`${backendUrl}/api/records/admin-data`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -312,6 +318,8 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
   useEffect(() => {
     if (!selectedOrgId) return;
 
+    if (!auth.currentUser || !selectedOrgId) return;
+
     // Listen to real-time vehicles transitions so Admin map is responsive to driver GPS positioning ticks in high frequency
     const vehiclesQuery = query(
       collection(db, 'vehicles'),
@@ -353,7 +361,7 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
         return merged;
       });
     }, (err) => {
-      console.warn("Firestore admin vehicles stream warning:", err);
+      console.warn("[OrgAdminDashboard] Firestore vehicles listener notice (using relational sync):", err?.message || err);
     });
 
     // Listen to real-time trips events
@@ -397,7 +405,7 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
 
       setLiveTrips(fsTrips);
     }, (err) => {
-      console.warn("Firestore admin trips stream warning:", err);
+      console.warn("[OrgAdminDashboard] Firestore trips listener notice (using relational sync):", err?.message || err);
     });
 
     return () => {
@@ -611,7 +619,7 @@ function Overview({ stats, org, userData, membersLabel, vehicles, routes, liveTr
                     </Popup>
                   </Marker>
                )}
-               {vehicles.map((v: any) => v.location && (
+               {vehicles.map((v: any) => v.location && isValidCoordinate(v.location.lat, v.location.lng) && (
                   <Marker 
                      key={v.id} 
                      position={[v.location.lat, v.location.lng]} 
@@ -5286,7 +5294,12 @@ function Reports({ org, vehicles, routes, members, drivers = [], tripsMySQL = []
       return;
     }
 
-    // Otherwise fall back to Firestore snapshot subscription
+    // Otherwise fall back to Firestore snapshot subscription if authenticated
+    if (!auth.currentUser) {
+      setLoading(false);
+      return;
+    }
+
     const tripsQuery = query(
       collection(db, 'trips'),
       where('orgId', '==', org.id)
@@ -5297,8 +5310,8 @@ function Reports({ org, vehicles, routes, members, drivers = [], tripsMySQL = []
       setTrips(processTripsList(firestoreRawTrips));
       setLoading(false);
     }, (error) => {
-      console.error("Error subscribing to trips:", error);
       setLoading(false);
+      console.warn("[OrgAdminDashboard] Trips history real-time listener notice:", error?.message || error);
     });
 
     return () => unsub();

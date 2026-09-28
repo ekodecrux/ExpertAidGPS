@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { doc, onSnapshot, collection, query, where, addDoc, updateDoc, setDoc, serverTimestamp, getDocs, getDoc, arrayUnion } from 'firebase/firestore';
 import { saveMySQLRecord, saveMySQLRecordsBatch } from '../lib/mysql';
+import { getBackendUrl } from '../lib/apiPatch';
 
 export default function DriverMapView({ 
   activeTrip,
@@ -40,8 +41,14 @@ export default function DriverMapView({
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
 
   const [roadCoords, setRoadCoords] = useState<[number, number][]>([]);
-  const trackingVehicleId = activeTrip?.vehicleId || currentRoute?.vehicleId || userData?.vehicleId || 'DEV-V1';
-  const userVehicle = vehicles.find(v => v && v.id === trackingVehicleId);
+  const driverUid = userData?.id || userData?.uid;
+  const userVehicle = vehicles.find(v => v && (
+    v.id === activeTrip?.vehicleId ||
+    v.id === currentRoute?.vehicleId ||
+    v.id === userData?.vehicleId ||
+    (driverUid && v.driverId === driverUid) ||
+    (currentRoute?.id && v.routeId === currentRoute.id)
+  )) || vehicles[0] || null;
 
   const mapRef = useRef<any>(null);
   const transitionPending = useRef<string | null>(null);
@@ -304,7 +311,17 @@ export default function DriverMapView({
 
       // 3. Set Vehicles
       if (res.vehicles) {
-        setVehicles(res.vehicles);
+        const mappedVehicles = res.vehicles.map((v: any) => {
+          const locObj = (v.latitude !== null && v.longitude !== null && v.latitude !== undefined && v.longitude !== undefined)
+            ? { lat: Number(v.latitude), lng: Number(v.longitude) }
+            : (typeof v.location === 'string' ? (() => { try { return JSON.parse(v.location); } catch(e) { return null; } })() : v.location || res.org?.location || null);
+          return {
+            ...v,
+            plateNumber: v.plateNumber || v.number || "BUS-01",
+            location: locObj
+          };
+        });
+        setVehicles(mappedVehicles);
       }
 
       // 4. Set Route Manifest (users on active route)
@@ -330,14 +347,17 @@ export default function DriverMapView({
     if (driverData) {
       processMapData(driverData);
       setLoading(false);
-      return;
     }
 
     const fetchMySQLDriverMapData = async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        let token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         if (!token) return;
-        const resObj = await fetch('/api/records/user-data', {
+        const backendUrl = getBackendUrl();
+        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -1127,7 +1147,7 @@ export default function DriverMapView({
     : (currentTargetStop ? { lat: currentTargetStop.lat, lng: currentTargetStop.lng } : null);
 
   return (
-    <div className="absolute inset-0 -m-4 flex flex-col overflow-hidden bg-slate-100">
+    <div className="absolute inset-0 flex flex-col overflow-hidden bg-slate-100">
       {/* 1. Precise Stats Overlay */}
       <div className="absolute top-4 left-4 right-4 z-[1000]">
         <header className="px-4 py-3 bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/50 flex items-center justify-between gap-3">
@@ -1207,7 +1227,7 @@ export default function DriverMapView({
           center={mapCenter}
           className="z-0"
           hideControls={false}
-          hideMapStyles={true}
+          hideMapStyles={false}
           hideUserLocation={false}
           highAccuracy={true}
           controlsPosition="top-right"
@@ -1266,20 +1286,18 @@ export default function DriverMapView({
             );
           })}
 
-          {vehicles
-            .filter((v: any) => v && v.id === trackingVehicleId)
-            .map((v: any) => v.location && isValidCoordinate(v.location.lat, v.location.lng) && (
-              <Marker 
-                key={`bus-${v.id}-${parseFloat(v.location.lat)}-${parseFloat(v.location.lng)}`} 
-                position={[parseFloat(v.location.lat), parseFloat(v.location.lng)]} 
-                icon={createMarkerIcon(
-                  '#2563eb', 
-                  getLocalIcon('bus'), 
-                  '#2563eb', 
-                  v.plateNumber ? `BUS: ${v.plateNumber}` : 'YOUR BUS'
-                )} 
-              />
-            ))}
+          {userVehicle && userVehicle.location && isValidCoordinate(userVehicle.location.lat, userVehicle.location.lng) && (
+            <Marker 
+              key={`bus-${userVehicle.id}-${parseFloat(userVehicle.location.lat)}-${parseFloat(userVehicle.location.lng)}`} 
+              position={[parseFloat(userVehicle.location.lat), parseFloat(userVehicle.location.lng)]} 
+              icon={createMarkerIcon(
+                '#2563eb', 
+                getLocalIcon('bus'), 
+                '#2563eb', 
+                userVehicle.plateNumber ? `BUS: ${userVehicle.plateNumber}` : 'YOUR BUS'
+              )} 
+            />
+          )}
         </MapComponent>
 
 

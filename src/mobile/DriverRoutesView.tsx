@@ -6,6 +6,7 @@ import { db, auth } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { cn, getSectorTerminology, getSortedStops, getLocalAvatar, isValidCoordinate, getUserAvatar } from '../lib/utils';
 import { saveMySQLRecord } from '../lib/mysql';
+import { getBackendUrl } from '../lib/apiPatch';
 import toast from 'react-hot-toast';
 
 interface DriverRoutesViewProps {
@@ -124,7 +125,7 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
 
   // 1. Fetch Comprehensive Driver Route Data from MySQL (decoupled from Firestore)
   useEffect(() => {
-    if (!userData?.orgId || !userData?.routeId) return;
+    if (!userData?.orgId) return;
 
     const processRoutesData = (res: any) => {
       // Set Organization (straight from MySQL)
@@ -133,24 +134,35 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
       }
 
       // Set Route details
-      if (res.routes) {
+      let selectedRoute = null;
+      if (res.routes && res.routes.length > 0) {
+        console.log('[DriverRoutesView] Routes received:', res.routes.length, 'Looking for routeId:', userData.routeId);
         const matchedRoute = res.routes.find((r: any) => r && r.id === userData.routeId);
         if (matchedRoute) {
+          console.log('[DriverRoutesView] Route matched:', matchedRoute.name);
+          selectedRoute = matchedRoute;
           setRoute(matchedRoute);
+        } else {
+          console.warn('[DriverRoutesView] No route matched. Showing first available route');
+          if (res.routes.length > 0) {
+            selectedRoute = res.routes[0];
+            setRoute(res.routes[0]);
+          }
         }
       }
 
       // Set Active Trip
-      if (res.trips) {
+      if (res.trips && selectedRoute) {
         const matchedTrip = res.trips.find(
-          (t: any) => t && t.routeId === userData.routeId && (t.status === 'live' || t.status === 'ongoing') && t.driverId === (userData?.id || userData?.uid)
+          (t: any) => t && t.routeId === selectedRoute.id && (t.status === 'live' || t.status === 'ongoing') && t.driverId === (userData?.id || userData?.uid)
         );
         setActiveTrip(matchedTrip || null);
       }
 
       // Set Assigned Users (under this route)
-      if (res.users) {
-        const routeUsers = res.users.filter((u: any) => u.routeId === userData.routeId && (u.role === 'user' || u.role === 'member'));
+      if (res.users && selectedRoute) {
+        const routeUsers = res.users.filter((u: any) => u.routeId === selectedRoute.id && u.role !== 'driver');
+        console.log('[DriverRoutesView] Route users for route', selectedRoute.id, ':', routeUsers.length, 'users with roles:', routeUsers.map((u: any) => u.role).join(','));
         setAllRouteUsers(routeUsers);
       }
     };
@@ -163,9 +175,13 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
 
     const fetchMySQLDriverRoutesData = async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        let token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token) {
+          token = localStorage.getItem("expert_gps_fallback_token") || undefined;
+        }
         if (!token) return;
-        const resObj = await fetch('/api/records/user-data', {
+        const backendUrl = getBackendUrl();
+        const resObj = await fetch(`${backendUrl}/api/records/user-data`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -192,7 +208,7 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
     const interval = setInterval(fetchMySQLDriverRoutesData, 4000);
 
     return () => clearInterval(interval);
-  }, [userData?.routeId, userData?.orgId, driverData]);
+  }, [userData?.orgId, driverData]);
 
   const getStopUsers = (stopId: string) => {
     return allRouteUsers.filter(u => u.pickupPointId === stopId);
