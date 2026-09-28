@@ -51,27 +51,38 @@ export const createMarkerIcon = (
   }
 
   const resolvedIconUrl = getLocalIcon(iconUrl || 'bus');
+  const glow = shadowColor || color || '#3b82f6';
   const icon = new L.DivIcon({
     className: 'custom-div-icon',
     html: `
-      <div class="relative flex flex-col items-center justify-center">
+      <div class="relative flex flex-col items-center justify-center select-none pointer-events-auto" style="filter: drop-shadow(0 10px 20px rgba(0,0,0,0.22));">
         ${label ? `
-          <div class="absolute -top-10 px-3 py-1 text-[10px] font-black rounded-lg shadow-2xl whitespace-nowrap uppercase tracking-[0.2em] border z-50 animate-in fade-in zoom-in duration-300" 
-               style="background-color: ${labelBgColor || '#0f172a'}; color: ${labelTextColor || '#ffffff'}; border-color: ${labelBgColor || '#334155'}">
-            ${label}
+          <div class="absolute -top-9 px-2.5 py-1 text-[8.5px] font-black rounded-full shadow-xl whitespace-nowrap uppercase tracking-wider border z-50 flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200" 
+               style="background-color: ${labelBgColor || '#0f172a'}; color: ${labelTextColor || '#ffffff'}; border-color: rgba(255,255,255,0.2); backdrop-filter: blur(8px);">
+            <span class="w-1.5 h-1.5 rounded-full animate-pulse" style="background-color: ${color}"></span>
+            <span class="drop-shadow-xs">${label}</span>
           </div>
         ` : ''}
-        <div class="absolute w-14 h-14 rounded-full blur-xl opacity-60 animate-pulse" style="background-color: ${shadowColor || color}"></div>
-        <div class="relative w-12 h-12 bg-white border-4 rounded-[1.5rem] flex items-center justify-center shadow-2xl hover:scale-110 hover:-rotate-3 transition-colors duration-300 overflow-hidden group" style="border-color: ${color}">
-          <div class="absolute inset-0 bg-gradient-to-br from-white via-slate-50 to-slate-100 opacity-50"></div>
-          <img src="${resolvedIconUrl}" class="relative w-8 h-8 object-contain drop-shadow-sm transition-transform" />
+        
+        <!-- Radiant Ambient Glow Halo -->
+        <div class="absolute w-12 h-12 rounded-full opacity-45 pointer-events-none" style="background-color: ${glow}; filter: blur(7px);"></div>
+        
+        <!-- Premium Hex/Rounded Core -->
+        <div class="relative w-11 h-11 rounded-2xl flex items-center justify-center p-0.5 transition-transform duration-200 hover:scale-110 active:scale-95 shadow-md"
+             style="background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%); border: 3px solid ${color};">
+          <div class="w-full h-full rounded-xl bg-white flex items-center justify-center overflow-hidden shadow-inner">
+            <img src="${resolvedIconUrl}" class="w-6 h-6 object-contain drop-shadow-xs" alt="" />
+          </div>
         </div>
-        <div class="absolute -bottom-2 w-3 h-3 border-2 border-white rounded-full shadow-lg" style="background-color: ${color}"></div>
+        
+        <!-- Sharp Downward Pointer Tip -->
+        <div class="w-2.5 h-2.5 rotate-45 -mt-1 rounded-xs border-r-2 border-b-2 shadow-xs" 
+             style="background-color: #f1f5f9; border-color: ${color};"></div>
       </div>
     `,
-    iconSize: [56, 56],
-    iconAnchor: [28, 56],
-    popupAnchor: [0, -56],
+    iconSize: [46, 52],
+    iconAnchor: [23, 50],
+    popupAnchor: [0, -50],
   });
 
   iconCache[cacheKey] = icon;
@@ -81,13 +92,14 @@ export const createMarkerIcon = (
 const userLocationIcon = new L.DivIcon({
   className: 'user-location-icon',
   html: `
-    <div class="relative flex items-center justify-center">
-      <div class="absolute w-8 h-8 bg-blue-500 rounded-full blur-sm opacity-40 animate-ping"></div>
-      <div class="relative w-5 h-5 bg-blue-600 border-2 border-white rounded-full shadow-xl"></div>
+    <div class="relative flex items-center justify-center select-none pointer-events-none">
+      <div class="absolute w-12 h-12 bg-blue-500 rounded-full opacity-20 animate-ping"></div>
+      <div class="absolute w-8 h-8 bg-blue-400/30 rounded-full animate-pulse"></div>
+      <div class="relative w-4 h-4 bg-gradient-to-tr from-blue-700 to-blue-500 border-2 border-white rounded-full shadow-lg ring-4 ring-blue-500/25"></div>
     </div>
   `,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
+  iconSize: [48, 48],
+  iconAnchor: [24, 24],
 });
 
 export const vehicleIcon = createMarkerIcon('#3b82f6', getLocalIcon('bus'), '#3b82f6');
@@ -378,12 +390,12 @@ export const isNightTime = (): boolean => {
 export const MAP_LAYERS = {
   standard: {
     name: 'Clean Streets',
-    tag: 'Clean Street Map',
+    tag: 'Voyager Navigation',
     icon: '🗺️',
-    desc: 'Crisp roads, transit stops, landmarks and navigation paths',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    subdomains: 'abc',
+    desc: 'Crisp roads, transit stops, landmarks and navigation paths with Retina clarity',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
     maxZoom: 19,
     maxNativeZoom: 19
   },
@@ -400,12 +412,12 @@ export const MAP_LAYERS = {
   },
   light: {
     name: 'Clean Streets',
-    tag: 'Clean Street Map',
+    tag: 'Voyager Navigation',
     icon: '🗺️',
-    desc: 'Crisp roads, transit stops, landmarks and navigation paths',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    subdomains: 'abc',
+    desc: 'Crisp roads, transit stops, landmarks and navigation paths with Retina clarity',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
     maxZoom: 19,
     maxNativeZoom: 19
   },
@@ -421,13 +433,13 @@ export const MAP_LAYERS = {
     maxNativeZoom: 18
   },
   dark: {
-    name: 'Google Night Mode',
-    tag: 'Night Canvas',
+    name: 'Night Canvas',
+    tag: 'Dark Navigation',
     icon: '🌙',
-    desc: 'Dark high-contrast Google Maps night navigation mode',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    subdomains: 'abc',
+    desc: 'Executive high-contrast dark navigation styling',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
     maxZoom: 19,
     maxNativeZoom: 19
   }
@@ -562,10 +574,10 @@ function CustomControls({
         onClick={(e) => { e.stopPropagation(); onLocate(); }}
         disabled={isLocating}
         className={cn(
-          "w-11 h-11 bg-white rounded-full shadow-xl border border-slate-200 flex items-center justify-center transition-all active:scale-90",
+          "w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all active:scale-90 backdrop-blur-md",
           isLocating 
-            ? "text-blue-600 bg-blue-50 border-blue-300 ring-2 ring-blue-400/30" 
-            : "text-slate-600 hover:text-blue-600 hover:bg-slate-50 hover:border-blue-100"
+            ? "text-blue-600 bg-blue-50/95 border-blue-300 ring-2 ring-blue-400/30" 
+            : "text-slate-700 bg-white/95 border-slate-200/90 hover:bg-white hover:text-blue-600 hover:shadow-2xl"
         )}
         title={isLocating ? "Locating current position..." : "Go to Current Location (Immediate)"}
       >
@@ -576,8 +588,8 @@ function CustomControls({
         )}
       </button>
 
-      {/* Zoom Controls with max zoom 19 clamp to eliminate 'data not yet available' */}
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden flex flex-col">
+      {/* Zoom Controls */}
+      <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 overflow-hidden flex flex-col">
         <button 
           type="button"
           onClick={(e) => { 
@@ -588,10 +600,10 @@ function CustomControls({
               safeToast.success('Maximum zoom level reached', { id: 'max-zoom' });
             }
           }}
-          className="w-11 h-11 flex items-center justify-center text-slate-600 hover:bg-slate-50 border-b border-slate-100 transition-colors active:scale-95"
+          className="w-11 h-10 flex items-center justify-center text-slate-700 hover:bg-slate-100/80 border-b border-slate-100 transition-colors active:scale-95"
           title="Zoom In"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-4 h-4" />
         </button>
         <button 
           type="button"
@@ -601,14 +613,14 @@ function CustomControls({
               map.zoomOut(); 
             }
           }}
-          className="w-11 h-11 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors active:scale-95"
+          className="w-11 h-10 flex items-center justify-center text-slate-700 hover:bg-slate-100/80 transition-colors active:scale-95"
           title="Zoom Out"
         >
-          <Minus className="w-5 h-5" />
+          <Minus className="w-4 h-4" />
         </button>
       </div>
 
-      {/* 1-Click Map Style Toggle: Clean Street <-> Satellite (Icon remains consistent) */}
+      {/* 1-Click Map Style Toggle: Clean Street <-> Satellite */}
       {!hideMapStyles && (
         <button 
           type="button"
@@ -617,10 +629,10 @@ function CustomControls({
             onToggleMapType();
           }}
           className={cn(
-            "w-11 h-11 bg-white rounded-full shadow-xl border flex items-center justify-center transition-all active:scale-95 group",
+            "w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all active:scale-95 group backdrop-blur-md",
             mapType === 'satellite' 
-              ? "text-blue-600 bg-blue-50 border-blue-300 ring-2 ring-blue-400/30 shadow-blue-100" 
-              : "text-slate-600 border-slate-200 hover:text-blue-600 hover:bg-slate-50"
+              ? "text-blue-600 bg-blue-50/95 border-blue-300 ring-2 ring-blue-400/30 shadow-blue-100" 
+              : "text-slate-700 bg-white/95 border-slate-200/90 hover:text-blue-600 hover:bg-white"
           )}
           title={mapType === 'satellite' ? "Switch to Clean Street Map" : "Switch to Satellite View"}
         >
@@ -647,10 +659,10 @@ function CustomControls({
           }
         }}
         className={cn(
-          "w-11 h-11 bg-white rounded-full shadow-xl border flex items-center justify-center transition-all active:scale-95",
+          "w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all active:scale-95 backdrop-blur-md",
           isFullscreen 
-            ? "text-blue-600 bg-blue-50 border-blue-300 ring-2 ring-blue-400/30" 
-            : "text-slate-600 border-slate-200 hover:text-blue-600 hover:bg-slate-50"
+            ? "text-blue-600 bg-blue-50/95 border-blue-300 ring-2 ring-blue-400/30" 
+            : "text-slate-700 bg-white/95 border-slate-200/90 hover:text-blue-600 hover:bg-white"
         )}
         title={isFullscreen ? "Exit Fullscreen (Esc)" : "Expand Map (Fullscreen)"}
       >
