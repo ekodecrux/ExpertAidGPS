@@ -890,32 +890,6 @@ export default function MapComponent({
         ...(isFullscreen ? { top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', position: 'fixed' } : {})
       }}
     >
-      {/* Top Banner when in fullscreen mode */}
-      {isFullscreen && (
-        <div className="absolute top-4 left-4 z-[2000] flex items-center gap-2.5 bg-slate-900/90 backdrop-blur-md text-white px-4 py-2 rounded-full shadow-2xl border border-slate-700 pointer-events-auto animate-in fade-in slide-in-from-top-2 duration-300">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="text-xs font-black tracking-wide uppercase">Expanded Fullscreen Map</span>
-          {isNightActive && (
-            <span className="text-[10px] font-bold bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
-              🌙 Night Mode
-            </span>
-          )}
-          {mapType === 'satellite' && (
-            <span className="text-[10px] font-bold bg-blue-500/30 text-blue-300 border border-blue-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
-              🛰️ Satellite View
-            </span>
-          )}
-          <button 
-            type="button"
-            onClick={toggleFullscreen}
-            className="ml-2 text-[11px] font-black bg-white/20 hover:bg-white/30 text-white px-2.5 py-1 rounded-full transition-colors flex items-center gap-1"
-          >
-            <Minimize2 className="w-3 h-3" />
-            Exit (Esc)
-          </button>
-        </div>
-      )}
-
       <MapContainer 
         center={[sanitizedCenter.lat, sanitizedCenter.lng]} 
         zoom={sanitizedZoom} 
