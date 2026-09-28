@@ -285,302 +285,288 @@ export default function UserApp() {
 
   const userNotifs = getNotifications(userData);
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'home':
-        return <UserDashboard userDbData={userDbData} userDbDataLoading={userDbDataLoading} />;
-      case 'track':
-        return <UserMapView userDbData={userDbData} userDbDataLoading={userDbDataLoading} />;
-      case 'routes':
-        return <UserRoutesView userDbData={userDbData} userDbDataLoading={userDbDataLoading} />;
-      case 'alerts':
-        return (
-          <div className="space-y-6">
-            <div className="flex justify-between items-end">
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Strategic Alerts</h2>
-              {userNotifs.some((n: any) => !n.dismissed) && (
-                <button 
-                  onClick={markAllAsRead}
-                  className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline"
-                >
-                  Mark All Read
-                </button>
-              )}
-            </div>
-            <div className="space-y-4 pb-20">
-              {userNotifs.length > 0 ? (
-                userNotifs.slice().reverse().map((notif: any, i: number) => {
-                  const messageCleaned = cleanMessage(notif.message);
-                  const isStart = notif.type === 'trip_start' || notif.type === 'start' || notif.message?.toLowerCase().includes('started');
-                  const isEnd = notif.type === 'trip_end' || notif.type === 'end' || notif.message?.toLowerCase().includes('completed');
-                  const isPicked = notif.type === 'status_picked' || notif.type === 'picked';
-                  const isDropped = notif.type === 'status_dropped' || notif.type === 'dropped';
-                  const isAbsent = notif.type === 'status_absent' || notif.type === 'absent';
+  const renderAlertsTab = () => (
+    <div className="space-y-6">
+      <div className="flex justify-between items-end">
+        <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Strategic Alerts</h2>
+        {userNotifs.some((n: any) => !n.dismissed) && (
+          <button 
+            onClick={markAllAsRead}
+            className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline cursor-pointer"
+          >
+            Mark All Read
+          </button>
+        )}
+      </div>
+      <div className="space-y-4 pb-20">
+        {userNotifs.length > 0 ? (
+          userNotifs.slice().reverse().map((notif: any, i: number) => {
+            const messageCleaned = cleanMessage(notif.message);
+            const isStart = notif.type === 'trip_start' || notif.type === 'start' || notif.message?.toLowerCase().includes('started');
+            const isEnd = notif.type === 'trip_end' || notif.type === 'end' || notif.message?.toLowerCase().includes('completed');
+            const isPicked = notif.type === 'status_picked' || notif.type === 'picked';
+            const isDropped = notif.type === 'status_dropped' || notif.type === 'dropped';
+            const isAbsent = notif.type === 'status_absent' || notif.type === 'absent';
 
-                  let bgClass = "bg-white border-slate-100 ring-1 ring-slate-50";
-                  let iconBg = "bg-blue-50 text-blue-600";
-                  let IconComponent = Bus;
-                  let title = "Transit Update";
-                  let titleColor = "text-blue-600";
-                  let newBadgeBg = "bg-blue-600";
+            let bgClass = "bg-white border-slate-100 ring-1 ring-slate-50";
+            let iconBg = "bg-blue-50 text-blue-600";
+            let IconComponent = Bus;
+            let title = "Transit Update";
+            let titleColor = "text-blue-600";
+            let newBadgeBg = "bg-blue-600";
 
-                  if (isStart) {
-                    bgClass = "bg-blue-50/40 border-blue-100/50 ring-1 ring-blue-50/20";
-                    iconBg = "bg-blue-100/80 text-blue-600";
-                    IconComponent = Navigation;
-                    title = "Trip Started";
-                    titleColor = "text-blue-600";
-                    newBadgeBg = "bg-blue-600";
-                  } else if (isEnd) {
-                    bgClass = "bg-emerald-50/40 border-emerald-100/50 ring-1 ring-emerald-50/20";
-                    iconBg = "bg-emerald-100/80 text-emerald-600";
-                    IconComponent = CheckCircle;
-                    title = "Trip Completed";
-                    titleColor = "text-emerald-600";
-                    newBadgeBg = "bg-emerald-600";
-                  } else if (isPicked) {
-                    bgClass = "bg-emerald-50/40 border-emerald-100/50 ring-1 ring-emerald-50/20";
-                    iconBg = "bg-emerald-100/80 text-emerald-600";
-                    IconComponent = CheckCircle;
-                    title = "Pickup Confirmation";
-                    titleColor = "text-emerald-600";
-                    newBadgeBg = "bg-emerald-600";
-                  } else if (isDropped) {
-                    bgClass = "bg-blue-50/40 border-blue-100/50 ring-1 ring-blue-50/20";
-                    iconBg = "bg-blue-100/80 text-blue-600";
-                    IconComponent = Home;
-                    title = "Safe Drop-off";
-                    titleColor = "text-blue-600";
-                    newBadgeBg = "bg-blue-600";
-                  } else if (isAbsent) {
-                    bgClass = "bg-rose-50/40 border-rose-100/50 ring-1 ring-rose-50/20";
-                    iconBg = "bg-rose-100/80 text-rose-600";
-                    IconComponent = XCircle;
-                    title = "Attendance Alert";
-                    titleColor = "text-rose-600";
-                    newBadgeBg = "bg-rose-600";
-                  }
+            if (isStart) {
+              bgClass = "bg-blue-50/40 border-blue-100/50 ring-1 ring-blue-50/20";
+              iconBg = "bg-blue-100/80 text-blue-600";
+              IconComponent = Navigation;
+              title = "Trip Started";
+              titleColor = "text-blue-600";
+              newBadgeBg = "bg-blue-600";
+            } else if (isEnd) {
+              bgClass = "bg-emerald-50/40 border-emerald-100/50 ring-1 ring-emerald-50/20";
+              iconBg = "bg-emerald-100/80 text-emerald-600";
+              IconComponent = CheckCircle;
+              title = "Trip Completed";
+              titleColor = "text-emerald-600";
+              newBadgeBg = "bg-emerald-600";
+            } else if (isPicked) {
+              bgClass = "bg-emerald-50/40 border-emerald-100/50 ring-1 ring-emerald-50/20";
+              iconBg = "bg-emerald-100/80 text-emerald-600";
+              IconComponent = CheckCircle;
+              title = "Pickup Confirmation";
+              titleColor = "text-emerald-600";
+              newBadgeBg = "bg-emerald-600";
+            } else if (isDropped) {
+              bgClass = "bg-blue-50/40 border-blue-100/50 ring-1 ring-blue-50/20";
+              iconBg = "bg-blue-100/80 text-blue-600";
+              IconComponent = Home;
+              title = "Safe Drop-off";
+              titleColor = "text-blue-600";
+              newBadgeBg = "bg-blue-600";
+            } else if (isAbsent) {
+              bgClass = "bg-rose-50/40 border-rose-100/50 ring-1 ring-rose-50/20";
+              iconBg = "bg-rose-100/80 text-rose-600";
+              IconComponent = XCircle;
+              title = "Attendance Alert";
+              titleColor = "text-rose-600";
+              newBadgeBg = "bg-rose-600";
+            }
 
-                  if (notif.dismissed) {
-                    bgClass = "bg-slate-50 border-slate-100 opacity-60";
-                    iconBg = "bg-slate-100 text-slate-400";
-                  }
+            if (notif.dismissed) {
+              bgClass = "bg-slate-50 border-slate-100 opacity-60";
+              iconBg = "bg-slate-100 text-slate-400";
+            }
 
-                  return (
-                    <div 
-                      key={i} 
-                      onClick={() => !notif.dismissed && dismissNotification(notif.timestamp)}
-                      className={cn(
-                        "p-6 rounded-[2rem] shadow-xl border flex gap-4 transition-all active:scale-[0.98]",
-                        bgClass
-                      )}
-                    >
-                      <div className={cn(
-                        "w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm",
-                        iconBg
+            return (
+              <div 
+                key={i} 
+                onClick={() => !notif.dismissed && dismissNotification(notif.timestamp)}
+                className={cn(
+                  "p-6 rounded-[2rem] shadow-xl border flex gap-4 transition-all active:scale-[0.98] cursor-pointer",
+                  bgClass
+                )}
+              >
+                <div className={cn(
+                  "w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm",
+                  iconBg
+                )}>
+                  <IconComponent size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="flex items-center gap-2">
+                      <p className={cn(
+                        "text-[10px] font-black uppercase tracking-widest",
+                        titleColor
                       )}>
-                        <IconComponent size={20} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start mb-1">
-                          <div className="flex items-center gap-2">
-                            <p className={cn(
-                              "text-[10px] font-black uppercase tracking-widest",
-                              titleColor
-                            )}>
-                              {title}
-                            </p>
-                            {!notif.dismissed && (
-                              <span className={cn(
-                                "px-1.5 py-0.5 text-[7px] text-white font-black rounded-md animate-pulse",
-                                newBadgeBg
-                              )}>NEW</span>
-                            )}
-                          </div>
-                          <span className="text-[9px] font-bold text-slate-400">
-                            {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <p className="text-sm font-black text-slate-800 leading-tight uppercase tracking-tighter mb-2 break-words">{messageCleaned}</p>
-                        <div className="flex items-center gap-1.5 text-[8px] font-black text-slate-400 uppercase tracking-widest">
-                          <Clock size={8} />
-                          <span>{new Date(notif.timestamp).toLocaleDateString()}</span>
-                        </div>
-                      </div>
+                        {title}
+                      </p>
+                      {!notif.dismissed && (
+                        <span className={cn(
+                          "px-1.5 py-0.5 text-[7px] text-white font-black rounded-md animate-pulse",
+                          newBadgeBg
+                        )}>NEW</span>
+                      )}
                     </div>
-                  );
-                })
-              ) : (
-                <div className="bg-white p-10 rounded-[2.5rem] shadow-xl text-center py-20 text-slate-300 border border-dashed border-slate-200">
-                   <Bell size={48} className="mx-auto mb-4 opacity-10" />
-                   <p className="text-[10px] font-black uppercase tracking-[0.2em]">No operational alerts</p>
+                    <span className="text-[9px] font-bold text-slate-400">
+                      {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-sm font-black text-slate-800 leading-tight uppercase tracking-tighter mb-2 break-words">{messageCleaned}</p>
+                  <div className="flex items-center gap-1.5 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                    <Clock size={8} />
+                    <span>{new Date(notif.timestamp).toLocaleDateString()}</span>
+                  </div>
                 </div>
-              )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="bg-white p-10 rounded-[2.5rem] shadow-xl text-center py-20 text-slate-300 border border-dashed border-slate-200">
+             <Bell size={48} className="mx-auto mb-4 opacity-10" />
+             <p className="text-[10px] font-black uppercase tracking-[0.2em]">No operational alerts</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+  const renderProfileTab = () => (
+    <div className="space-y-8 pb-24">
+      {/* Header Section */}
+      <div className="flex flex-col items-center pt-8">
+        <div className="relative">
+          <div className="w-32 h-32 rounded-[2.5rem] bg-slate-100 overflow-hidden border-[4px] border-white shadow-2xl relative group">
+            <img 
+              src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
+              alt="Profile" 
+              className={cn("w-full h-full object-cover transition-opacity", updatingPhoto && "opacity-50")}
+            />
+            <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+              <Camera className="text-white" size={24} />
+              <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={updatingPhoto} />
+            </label>
+            {updatingPhoto && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+          </div>
+          <div className="absolute -bottom-1 -right-1 bg-blue-600 p-2 rounded-xl border-2 border-white shadow-lg">
+             <CheckCircle className="text-white" size={14} />
+          </div>
+        </div>
+        <h2 className="mt-6 text-2xl font-black text-slate-900 uppercase tracking-tighter italic">{userData?.name}</h2>
+        <p className="text-[10px] font-black text-slate-400 mt-1 uppercase tracking-[0.2em]">{userData?.role?.replace('_', ' ')} ID: {userData?.uid?.slice(0, 8)}</p>
+      </div>
+
+      {/* Information Grid */}
+      <div className="grid grid-cols-1 gap-4 px-2">
+        <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Personal Credentials</h4>
+          
+          <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+              <Mail size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Email Address</p>
+              <p className="text-sm font-black text-slate-800 truncate tracking-tight">{userData?.email}</p>
             </div>
           </div>
-        );
-      case 'profile':
-        return (
-          <div className="space-y-8 pb-24">
-            {/* Header Section */}
-            <div className="flex flex-col items-center pt-8">
-              <div className="relative">
-                <div className="w-32 h-32 rounded-[2.5rem] bg-slate-100 overflow-hidden border-[4px] border-white shadow-2xl relative group">
-                  <img 
-                    src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
-                    alt="Profile" 
-                    className={cn("w-full h-full object-cover transition-opacity", updatingPhoto && "opacity-50")}
-                  />
-                  <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                    <Camera className="text-white" size={24} />
-                    <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={updatingPhoto} />
-                  </label>
-                  {updatingPhoto && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  )}
-                </div>
-                <div className="absolute -bottom-1 -right-1 bg-blue-600 p-2 rounded-xl border-2 border-white shadow-lg">
-                   <CheckCircle className="text-white" size={14} />
-                </div>
-              </div>
-              <h2 className="mt-6 text-2xl font-black text-slate-900 uppercase tracking-tighter italic">{userData?.name}</h2>
-              <p className="text-[10px] font-black text-slate-400 mt-1 uppercase tracking-[0.2em]">{userData?.role?.replace('_', ' ')} ID: {userData?.uid.slice(0, 8)}</p>
+
+          <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <Phone size={18} />
             </div>
-
-            {/* Information Grid */}
-            <div className="grid grid-cols-1 gap-4 px-2">
-              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Personal Credentials</h4>
-                
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-                    <Mail size={18} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Email Address</p>
-                    <p className="text-sm font-black text-slate-800 truncate tracking-tight">{userData?.email}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                    <Phone size={18} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Contact Number</p>
-                    <p className="text-sm font-black text-slate-800 truncate tracking-tight">{userData?.phone || 'Not Provided'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Deployment Status</h4>
-                
-                <div className="flex items-center gap-4 p-2">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                    <Shield size={18} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Institution</p>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-tighter">{orgName || 'Loading institution...'}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 p-2">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                    <MapPin size={18} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Designated Route</p>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-tighter">{routeName || 'Route Pending'}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 p-2">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                    <Bus size={18} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Operational Stop</p>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-tighter">{stopName || 'Stop Pending'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Location &amp; Privacy</h4>
-                
-                <button 
-                  onClick={() => setShowLocationDisclosure(true)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-blue-50/70 border border-blue-100 text-blue-900 group transition-all active:scale-95 text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
-                      <MapPin size={18} />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-widest block">Location Disclosure</span>
-                      <span className="text-[9px] text-blue-600 font-bold">Google Play tracking &amp; consent</span>
-                    </div>
-                  </div>
-                  <ChevronRight size={16} className="text-blue-400 group-hover:translate-x-1 transition-transform" />
-                </button>
-
-                <button 
-                  onClick={() => setShowPrivacyModal(true)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 text-slate-800 group transition-all active:scale-95 text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-slate-600">
-                      <ShieldCheck size={18} />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-widest block">Privacy Policy</span>
-                      <span className="text-[9px] text-slate-400 font-bold">Data handling and security</span>
-                    </div>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
-
-              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Security &amp; Access</h4>
-                
-                <button 
-                  onClick={handlePasswordReset}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-amber-50 border border-amber-100 text-amber-900 group transition-all active:scale-95"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-amber-200 flex items-center justify-center text-amber-700">
-                      <Key size={18} />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest">Request Password Reset</span>
-                  </div>
-                  <ChevronRight size={16} className="text-amber-400 group-hover:translate-x-1 transition-transform" />
-                </button>
-
-                <button 
-                  onClick={() => logout()}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-900 text-white group transition-all active:scale-95 shadow-xl"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
-                      <LogOut size={18} />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest">Log out</span>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Contact Number</p>
+              <p className="text-sm font-black text-slate-800 truncate tracking-tight">{userData?.phone || 'Not Provided'}</p>
             </div>
           </div>
-        );
-      default:
-        return <UserDashboard />;
-    }
-  };
+        </div>
+
+        <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Deployment Status</h4>
+          
+          <div className="flex items-center gap-4 p-2">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+              <Shield size={18} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Institution</p>
+              <p className="text-xs font-black text-slate-900 uppercase tracking-tighter">{orgName || 'Loading institution...'}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 p-2">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+              <MapPin size={18} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Designated Route</p>
+              <p className="text-xs font-black text-slate-900 uppercase tracking-tighter">{routeName || 'Route Pending'}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 p-2">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+              <Bus size={18} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Operational Stop</p>
+              <p className="text-xs font-black text-slate-900 uppercase tracking-tighter">{stopName || 'Stop Pending'}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Location &amp; Privacy</h4>
+          
+          <button 
+            onClick={() => setShowLocationDisclosure(true)}
+            className="w-full flex items-center justify-between p-4 rounded-2xl bg-blue-50/70 border border-blue-100 text-blue-900 group transition-all active:scale-95 text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                <MapPin size={18} />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest block">Location Disclosure</span>
+                <span className="text-[9px] text-blue-600 font-bold">Google Play tracking &amp; consent</span>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-blue-400 group-hover:translate-x-1 transition-transform" />
+          </button>
+
+          <button 
+            onClick={() => setShowPrivacyModal(true)}
+            className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 text-slate-800 group transition-all active:scale-95 text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-slate-600">
+                <ShieldCheck size={18} />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest block">Privacy Policy</span>
+                <span className="text-[9px] text-slate-400 font-bold">Data handling and security</span>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
+          </button>
+        </div>
+
+        <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-2">Security &amp; Access</h4>
+          
+          <button 
+            onClick={handlePasswordReset}
+            className="w-full flex items-center justify-between p-4 rounded-2xl bg-amber-50 border border-amber-100 text-amber-900 group transition-all active:scale-95 cursor-pointer"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-200 flex items-center justify-center text-amber-700">
+                <Key size={18} />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest">Request Password Reset</span>
+            </div>
+            <ChevronRight size={16} className="text-amber-400 group-hover:translate-x-1 transition-transform" />
+          </button>
+
+          <button 
+            onClick={() => logout()}
+            className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-900 text-white group transition-all active:scale-95 shadow-xl cursor-pointer"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
+                <LogOut size={18} />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest">Log out</span>
+            </div>
+            <ChevronRight size={16} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -589,7 +575,21 @@ export default function UserApp() {
         onTabChange={setActiveTab} 
         tabs={tabs}
       >
-        {renderContent()}
+        <div className={activeTab === 'home' ? 'contents' : 'hidden'}>
+          <UserDashboard userDbData={userDbData} userDbDataLoading={userDbDataLoading} />
+        </div>
+        <div className={activeTab === 'track' ? 'contents' : 'hidden'}>
+          <UserMapView userDbData={userDbData} userDbDataLoading={userDbDataLoading} />
+        </div>
+        <div className={activeTab === 'routes' ? 'contents' : 'hidden'}>
+          <UserRoutesView userDbData={userDbData} userDbDataLoading={userDbDataLoading} />
+        </div>
+        <div className={activeTab === 'alerts' ? 'contents' : 'hidden'}>
+          {renderAlertsTab()}
+        </div>
+        <div className={activeTab === 'profile' ? 'contents' : 'hidden'}>
+          {renderProfileTab()}
+        </div>
       </MobileLayout>
 
       <LocationDisclosureModal

@@ -288,29 +288,30 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
       <main 
         className={cn(
           "flex-1 relative flex flex-col min-h-0",
-          activeTab === 'map' ? "overflow-hidden" : "overflow-y-auto overscroll-y-contain"
+          (activeTab === 'map' || activeTab === 'track') ? "overflow-hidden" : "overflow-y-auto overscroll-y-contain"
         )}
         style={{
           WebkitOverflowScrolling: 'touch',
           touchAction: 'pan-y'
         }}
       >
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          style={{ touchAction: 'pan-y' }}
+        <div
           className={cn(
-            "transition-all duration-300 flex-1 flex flex-col relative w-full",
-            activeTab === 'map' ? "h-full p-0 overflow-hidden" : "p-4 min-h-full pb-28"
+            "flex-1 flex flex-col relative w-full",
+            (activeTab === 'map' || activeTab === 'track') ? "h-full p-0 overflow-hidden" : "p-3 sm:p-4 min-h-full pb-24 sm:pb-28"
           )}
         >
           {children}
-        </motion.div>
+        </div>
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3 pb-8 flex justify-between items-center z-[5000] shadow-[0_-8px_30px_rgba(0,0,0,0.06)]">
+      <nav 
+        className="bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 sm:px-6 py-2 sm:py-3 flex justify-around items-center z-[5000] shadow-[0_-8px_30px_rgba(0,0,0,0.06)]"
+        style={{
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))'
+        }}
+      >
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -318,20 +319,20 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className="relative flex flex-col items-center gap-1"
+              className="relative flex flex-col items-center gap-0.5 sm:gap-1 py-1 px-2 rounded-xl transition-transform active:scale-95 cursor-pointer touch-manipulation select-none"
             >
               <div className={cn(
-                "p-2 rounded-2xl transition-all duration-300 relative",
-                isActive ? "bg-blue-600 text-white shadow shadow-blue-600/20 scale-105" : "text-slate-400"
+                "p-1.5 sm:p-2 rounded-xl sm:rounded-2xl transition-all duration-150 relative",
+                isActive ? "bg-blue-600 text-white shadow-md shadow-blue-600/30 scale-105" : "text-slate-400 hover:text-slate-600"
               )}>
-                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                <Icon size={19} strokeWidth={isActive ? 2.5 : 2} />
                 {tab.badge && (
-                  <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
                 )}
               </div>
               <span className={cn(
-                "text-[9px] font-black uppercase tracking-tighter transition-all",
-                isActive ? "text-blue-600 opacity-100" : "text-slate-400 opacity-60"
+                "text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-tight transition-colors",
+                isActive ? "text-blue-600 font-extrabold" : "text-slate-400 font-semibold"
               )}>
                 {tab.label}
               </span>

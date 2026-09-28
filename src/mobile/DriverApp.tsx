@@ -416,34 +416,7 @@ export default function DriverApp() {
     </motion.button>
   );
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'home':
-        return (
-          <DriverDashboard 
-            driverData={driverData} 
-            setDriverData={setDriverData}
-            driverDataLoading={driverDataLoading}
-            activeTrip={activeTrip}
-            setActiveTrip={setActiveTrip}
-          />
-        );
-      case 'routes':
-        return <DriverRoutesView driverData={driverData} driverDataLoading={driverDataLoading} />;
-      case 'map':
-        return (
-          <DriverMapView 
-            activeTrip={activeTrip} 
-            setActiveTrip={setActiveTrip}
-            isSelectingRoute={isSelectingRoute}
-            setIsSelectingRoute={setIsSelectingRoute}
-            driverData={driverData}
-            setDriverData={setDriverData}
-            driverDataLoading={driverDataLoading}
-          />
-        );
-      case 'profile':
-        return (
+  const renderProfileTab = () => (
           <div className="space-y-6 pb-20">
             <div className="flex flex-col items-center py-10 relative">
               <div className="relative group">
@@ -581,19 +554,7 @@ export default function DriverApp() {
               App Version 2.8.5 • Expert GPS Solutions
             </p>
           </div>
-        );
-      default:
-        return (
-          <DriverDashboard 
-            driverData={driverData} 
-            setDriverData={setDriverData}
-            driverDataLoading={driverDataLoading}
-            activeTrip={activeTrip}
-            setActiveTrip={setActiveTrip}
-          />
-        );
-    }
-  };
+  );
 
   return (
     <>
@@ -603,7 +564,32 @@ export default function DriverApp() {
         tabs={tabs}
         headerRight={headerRight}
       >
-        {renderContent()}
+        <div className={activeTab === 'home' ? 'contents' : 'hidden'}>
+          <DriverDashboard 
+            driverData={driverData} 
+            setDriverData={setDriverData}
+            driverDataLoading={driverDataLoading}
+            activeTrip={activeTrip}
+            setActiveTrip={setActiveTrip}
+          />
+        </div>
+        <div className={activeTab === 'routes' ? 'contents' : 'hidden'}>
+          <DriverRoutesView driverData={driverData} driverDataLoading={driverDataLoading} />
+        </div>
+        <div className={activeTab === 'map' ? 'contents' : 'hidden'}>
+          <DriverMapView 
+            activeTrip={activeTrip} 
+            setActiveTrip={setActiveTrip}
+            isSelectingRoute={isSelectingRoute}
+            setIsSelectingRoute={setIsSelectingRoute}
+            driverData={driverData}
+            setDriverData={setDriverData}
+            driverDataLoading={driverDataLoading}
+          />
+        </div>
+        <div className={activeTab === 'profile' ? 'contents' : 'hidden'}>
+          {renderProfileTab()}
+        </div>
       </MobileLayout>
 
       {/* Prominent Location Disclosure Modal (Google Play Policy Compliant) */}

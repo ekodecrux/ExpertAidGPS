@@ -58,11 +58,51 @@ function sanitizeUserData(data: any): any {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [userDataState, setUserDataState] = useState<UserData | null>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(() => {
+    try {
+      const fallbackToken = localStorage.getItem("expert_gps_fallback_token");
+      const fallbackUserStr = localStorage.getItem("expert_gps_fallback_user");
+      if (fallbackToken && fallbackUserStr) {
+        const fUser = JSON.parse(fallbackUserStr);
+        return {
+          uid: fUser.uid,
+          email: fUser.email,
+          displayName: fUser.name,
+          getIdToken: async () => fallbackToken
+        } as any;
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  const [userDataState, setUserDataState] = useState<UserData | null>(() => {
+    try {
+      const fallbackUserStr = localStorage.getItem("expert_gps_fallback_user");
+      if (fallbackUserStr) {
+        const fUser = JSON.parse(fallbackUserStr);
+        if (fUser?.uid) {
+          const cached = localStorage.getItem(`expert_gps_user_${fUser.uid}`);
+          if (cached) return sanitizeUserData(JSON.parse(cached));
+          return sanitizeUserData(fUser);
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
+
   const setUserData = (data: any) => setUserDataState(sanitizeUserData(data));
   const userData = userDataState;
-  const [loading, setLoading] = useState(true);
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      const fallbackToken = localStorage.getItem("expert_gps_fallback_token");
+      const fallbackUserStr = localStorage.getItem("expert_gps_fallback_user");
+      if (fallbackToken && fallbackUserStr) {
+        return false;
+      }
+    } catch (e) {}
+    return true;
+  });
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {

@@ -50,10 +50,14 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="flex flex-col items-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-slate-900 font-bold tracking-tight text-xs uppercase">Expert GPS Loading...</p>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="flex flex-col items-center text-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-4 animate-pulse">
+            <span className="text-white font-black text-2xl tracking-tighter italic">GPS</span>
+          </div>
+          <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p className="text-white font-black tracking-widest text-[11px] uppercase">Expert GPS Tracking</p>
+          <p className="text-slate-400 text-[10px] mt-1 font-medium">Initializing secure workspace...</p>
         </div>
       </div>
     );

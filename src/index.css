@@ -17,6 +17,7 @@
   *, ::before, ::after {
     font-variant-numeric: normal lining-nums;
     font-feature-settings: "zero" 0;
+    -webkit-tap-highlight-color: transparent;
   }
 
   html, body {
