@@ -10,22 +10,30 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: PrivacyPolicyMod
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden">
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto overscroll-contain animate-fadeIn"
+      style={{
+        paddingTop: 'max(0.625rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))',
+        paddingLeft: 'max(0.625rem, env(safe-area-inset-left))',
+        paddingRight: 'max(0.625rem, env(safe-area-inset-right))',
+      }}
+    >
+      <div className="relative w-full max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[min(92dvh,calc(100vh-1.5rem))] my-auto overflow-hidden text-left">
         {/* Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="shrink-0 px-4 py-3 sm:px-6 sm:py-4 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-400/40 flex items-center justify-center text-blue-400">
-              <ShieldCheck className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-600/30 border border-blue-400/40 flex items-center justify-center text-blue-400">
+              <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h2 className="font-bold text-base text-white">Privacy Policy</h2>
-              <p className="text-[11px] text-slate-400">Expert GPS Tracking & Fleet Management</p>
+              <h2 className="font-bold text-sm sm:text-base text-white">Privacy Policy</h2>
+              <p className="text-[10px] sm:text-[11px] text-slate-400">Expert GPS Tracking &amp; Fleet Management</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -33,15 +41,15 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: PrivacyPolicyMod
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-600 leading-relaxed">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-3.5 text-xs text-slate-600 leading-relaxed">
           <div>
-            <p className="font-semibold text-slate-800 text-sm mb-1">Last Updated: September 2026</p>
+            <p className="font-semibold text-slate-800 text-xs sm:text-sm mb-1">Last Updated: September 2026</p>
             <p>
               This Privacy Policy describes how Expert GPS Tracking (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) collects, uses, stores, and protects your information when you use our mobile application and fleet management platform.
             </p>
           </div>
 
-          <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-2xl">
+          <div className="p-3 sm:p-3.5 bg-blue-50 border border-blue-200 rounded-xl sm:rounded-2xl">
             <div className="flex items-start gap-2.5">
               <MapPin className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
               <div>
@@ -60,7 +68,7 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: PrivacyPolicyMod
               <Eye className="w-3.5 h-3.5 text-blue-600" />
               1. Information We Collect
             </h3>
-            <ul className="list-disc pl-5 space-y-1">
+            <ul className="list-disc pl-5 space-y-1 text-[11px] sm:text-xs">
               <li>
                 <strong>Precise &amp; Background Geolocation:</strong> When logged in as an authorized driver during an active trip, we collect precise GPS coordinates continuously (including when minimized or with the screen off) to project vehicle location onto authorized student, parent, and dispatcher maps.
               </li>
@@ -79,7 +87,7 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: PrivacyPolicyMod
               2. How We Use Your Location Data
             </h3>
             <p>Location data is strictly used for the operational safety and coordination of transport fleets:</p>
-            <ul className="list-disc pl-5 space-y-1 mt-1">
+            <ul className="list-disc pl-5 space-y-1 mt-1 text-[11px] sm:text-xs">
               <li>Live vehicle position tracking on fleet and guardian dashboards.</li>
               <li>Calculating accurate Estimated Times of Arrival (ETAs) at pickup and drop-off points.</li>
               <li>Route adherence alerts and student transit safety verification.</li>
@@ -121,10 +129,10 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: PrivacyPolicyMod
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+        <div className="shrink-0 p-3 sm:p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
           <button
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors cursor-pointer min-h-[40px] flex items-center justify-center"
           >
             Close Privacy Policy
           </button>
