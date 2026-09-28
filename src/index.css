@@ -35,7 +35,7 @@
 
   /* Vivid, crystal-clear map basemap rendering across all map components */
   .leaflet-tile-pane {
-    filter: saturate(1.15) contrast(1.05) brightness(1.01);
+    filter: saturate(1.22) contrast(1.06) brightness(1.02);
   }
 
   .leaflet-container {
@@ -45,14 +45,18 @@
     font-family: inherit !important;
   }
 
-  /* Night Mode container */
+  /* Night Mode container & dark navigation filter */
   .leaflet-container.google-night-mode {
-    background: #0f172a !important;
+    background: #111827 !important;
+  }
+
+  .leaflet-container.google-night-mode .leaflet-tile-pane {
+    filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(92%) saturate(0.85);
   }
 
   /* Preserve 100% natural aerial photography in satellite view */
   .leaflet-container.satellite-mode .leaflet-tile-pane {
-    filter: saturate(1.14) contrast(1.06) brightness(1.01) !important;
+    filter: saturate(1.12) contrast(1.06) brightness(1.0) !important;
   }
 
   /* Modern Glassmorphic Leaflet Popups */

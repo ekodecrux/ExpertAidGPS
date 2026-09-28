@@ -390,12 +390,12 @@ export const isNightTime = (): boolean => {
 export const MAP_LAYERS = {
   standard: {
     name: 'Clean Streets',
-    tag: 'Voyager Navigation',
+    tag: 'Clean Street Map',
     icon: '🗺️',
-    desc: 'Crisp roads, transit stops, landmarks and navigation paths with Retina clarity',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
+    desc: 'Crisp roads, transit stops, landmarks and navigation paths',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    subdomains: 'abc',
     maxZoom: 19,
     maxNativeZoom: 19
   },
@@ -412,12 +412,12 @@ export const MAP_LAYERS = {
   },
   light: {
     name: 'Clean Streets',
-    tag: 'Voyager Navigation',
+    tag: 'Clean Street Map',
     icon: '🗺️',
-    desc: 'Crisp roads, transit stops, landmarks and navigation paths with Retina clarity',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
+    desc: 'Crisp roads, transit stops, landmarks and navigation paths',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    subdomains: 'abc',
     maxZoom: 19,
     maxNativeZoom: 19
   },
@@ -433,13 +433,13 @@ export const MAP_LAYERS = {
     maxNativeZoom: 18
   },
   dark: {
-    name: 'Night Canvas',
-    tag: 'Dark Navigation',
+    name: 'Night Mode',
+    tag: 'Night Canvas',
     icon: '🌙',
-    desc: 'Executive high-contrast dark navigation styling',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
+    desc: 'Dark high-contrast navigation mode',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    subdomains: 'abc',
     maxZoom: 19,
     maxNativeZoom: 19
   }
