@@ -146,68 +146,38 @@ export default function DriverMapView({
     return getSortedStops(currentRoute?.pickupPoints, activeTrip, activeTrip?.direction || tripType);
   }, [currentRoute?.pickupPoints, activeTrip, tripType]);
 
-  // Helper to get route polyline coordinates (stops sequence)
-  const getRouteStops = () => {
-    if (!currentRoute?.pickupPoints) return [];
-    const direction = activeTrip?.direction || tripType;
-    const stops: [number, number][] = [];
-    
-    // 1. Initial point: Driver Location
-    if (userVehicle?.location && isValidCoordinate(userVehicle.location.lat, userVehicle.location.lng)) {
-      stops.push([userVehicle.location.lat, userVehicle.location.lng]);
+  const currentTargetStop = React.useMemo(() => {
+    return currentRoute?.pickupPoints?.find((p: any) => String(p.id) === String(activeTrip?.currentStopId));
+  }, [currentRoute?.pickupPoints, activeTrip?.currentStopId]);
+
+  const targetStopCoords = React.useMemo(() => {
+    if (activeTrip?.currentStopId === 'ORG') {
+      return (org?.location && isValidCoordinate(org.location.lat, org.location.lng))
+        ? { lat: Number(org.location.lat), lng: Number(org.location.lng) }
+        : null;
     }
+    if (currentTargetStop && isValidCoordinate(currentTargetStop.lat, currentTargetStop.lng)) {
+      return { lat: Number(currentTargetStop.lat), lng: Number(currentTargetStop.lng) };
+    }
+    const firstPending = sortedStopsList.find((p: any) => isValidCoordinate(p.lat, p.lng));
+    if (firstPending) {
+      return { lat: Number(firstPending.lat), lng: Number(firstPending.lng) };
+    }
+    return null;
+  }, [activeTrip?.currentStopId, org?.location, currentTargetStop, sortedStopsList]);
 
-    const hub = org?.location && isValidCoordinate(org.location.lat, org.location.lng) 
-      ? [org.location.lat, org.location.lng] as [number, number] 
-      : null;
-
-    const points = sortedStopsList;
-    const routeStops = points
-      .filter(p => isValidCoordinate(p.lat, p.lng))
-      .map(p => [p.lat, p.lng] as [number, number]);
-
-    const allMembersHandled = processedManifest.length > 0 && processedManifest.every(m => isHandled(m, direction));
-    
-    // If everything is done, check if we need to terminate or go to Hub
-    if (allMembersHandled) {
-      if (hub) {
-        const distToHub = userVehicle?.location ? getDistance(userVehicle.location.lat, userVehicle.location.lng, hub[0], hub[1]) : Infinity;
-        if (distToHub < 50) return [];
-        stops.push(hub);
-        return stops;
-      }
+  // Real road-following path directly from Driver position to the TARGET STOP
+  const getNavigationRouteStops = (): [number, number][] => {
+    if (!userVehicle?.location || !isValidCoordinate(userVehicle.location.lat, userVehicle.location.lng)) {
       return [];
     }
+    const driverLoc: [number, number] = [Number(userVehicle.location.lat), Number(userVehicle.location.lng)];
 
-    const currentStopId = activeTrip?.currentStopId;
-    const currentStopIdx = points.findIndex((p: any) => String(p.id) === String(currentStopId));
-
-    if (direction === 'pickup') {
-      // Sequence: Stops -> Hub
-      if (currentStopId === 'ORG') {
-        if (hub) stops.push(hub);
-      } else if (currentStopIdx !== -1) {
-        stops.push(...points.slice(currentStopIdx).map(p => [p.lat, p.lng] as [number, number]));
-      } else {
-        // Initial state or not targeting specific stop
-        stops.push(...routeStops);
-      }
-    } else {
-      // Sequence for Dropoff: Hub starting point -> Stops
-      // If we haven't reached school yet, go to hub
-      const distToHub = (hub && userVehicle?.location) ? getDistance(userVehicle.location.lat, userVehicle.location.lng, hub[0], hub[1]) : Infinity;
-      if (hub && distToHub > 50 && !currentStopId) {
-        stops.push(hub);
-      }
-
-      if (currentStopIdx !== -1) {
-        stops.push(...points.slice(currentStopIdx).map(p => [p.lat, p.lng] as [number, number]));
-      } else {
-        stops.push(...routeStops);
-      }
+    if (targetStopCoords) {
+      return [driverLoc, [targetStopCoords.lat, targetStopCoords.lng]];
     }
-    
-    return stops;
+
+    return [];
   };
 
   // Helper to fetch road-following path from OSRM
@@ -223,10 +193,11 @@ export default function DriverMapView({
     if (lastFetchedCoordsRef.current === coordinates) return;
     lastFetchedCoordsRef.current = coordinates;
     
+    const backendUrl = getBackendUrl();
     const urls = [
-      `https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordinates}?overview=full&geometries=geojson`,
+      `${backendUrl}/api/proxy/osrm/route/v1/driving/${coordinates}?overview=full&geometries=geojson`,
       `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`,
-      `/api/proxy/osrm/route/v1/driving/${coordinates}?overview=full&geometries=geojson`
+      `https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordinates}?overview=full&geometries=geojson`
     ];
 
     for (const url of urls) {
@@ -242,20 +213,20 @@ export default function DriverMapView({
         if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
           const path: [number, number][] = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
           setRoadCoords(path);
-          return; // Success! Exit early
+          return; // Success! Road navigation active
         }
       } catch (err) {
         console.warn(`Failed fetching OSRM road path from ${url} in mobile view`, err);
       }
     }
 
-    // fallback to straight lines if all fail
+    // fallback to connecting coordinates only if road network services are unreachable
     setRoadCoords(stops);
   };
 
   // Update road path whenever current route or trip details change
   useEffect(() => {
-    const stops = getRouteStops();
+    const stops = getNavigationRouteStops();
     if (stops.length >= 2) {
       fetchRoadPath(stops);
     } else {
@@ -266,9 +237,10 @@ export default function DriverMapView({
     activeTrip?.currentStopId, 
     activeTrip?.direction, 
     tripType,
-    // Round to 4 decimal places (~11m) to avoid hammering OSRM on tiny movements
-    Math.round((userVehicle?.location?.lat || 0) * 10000) / 10000,
-    Math.round((userVehicle?.location?.lng || 0) * 10000) / 10000
+    targetStopCoords?.lat,
+    targetStopCoords?.lng,
+    Math.round((userVehicle?.location?.lat || 0) * 1000) / 1000,
+    Math.round((userVehicle?.location?.lng || 0) * 1000) / 1000
   ]);
 
   // 1. Fetch Comprehensive Data from MySQL (replaces Firestore listeners to prevent Quota limits & mismatches)
@@ -1141,11 +1113,6 @@ export default function DriverMapView({
         ? { lat: org.location.lat, lng: org.location.lng } 
         : { lat: 17.4504, lng: 78.3808 });
 
-  const currentTargetStop = currentRoute?.pickupPoints?.find((p: any) => String(p.id) === String(activeTrip?.currentStopId));
-  const targetStopCoords = activeTrip?.currentStopId === 'ORG'
-    ? (org?.location ? { lat: org.location.lat, lng: org.location.lng } : null)
-    : (currentTargetStop ? { lat: currentTargetStop.lat, lng: currentTargetStop.lng } : null);
-
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden bg-slate-100">
       {/* 1. Precise Stats Overlay */}
@@ -1303,93 +1270,80 @@ export default function DriverMapView({
 
       </div>
 
-      {/* 3. Bottom Interface Panel (Revitalized Sectional Stops Bar) */}
+      {/* 3. Bottom Interface Panel (Clean Dedicated Navigation: ONLY Target Stop) */}
       <div className={`absolute bottom-6 left-4 right-4 z-[2000] transition-all duration-500 ${(activeTrip || currentRoute) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
-         <div className="flex items-center gap-3">
-            
-            {/* Left: Completed/Dropped Stops Section */}
-            <div className="flex items-center gap-2">
-               <button 
-                 onClick={() => setShowCompleted(!showCompleted)}
-                 className={`flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg border ${showCompleted ? 'bg-emerald-500 text-white border-emerald-400' : 'bg-white text-slate-300 border-slate-100'}`}
-                 title={showCompleted ? "Hide Completed" : "Show Completed"}
-               >
-                  <CheckCircle size={24} strokeWidth={showCompleted ? 3 : 2} />
-               </button>
-            </div>
+        {(() => {
+          const currentStop = currentRoute?.pickupPoints?.find((p: any) => String(p.id) === String(activeTrip?.currentStopId));
+          const isOrg = activeTrip?.currentStopId === 'ORG';
+          const name = isOrg ? (org?.name || 'School / Base Hub') : (currentStop?.name || 'Target Station');
+          const targetStatus = activeTrip?.direction === 'dropoff' ? 'dropped' : 'picked';
+          const stopUsers = isOrg ? [] : processedManifest.filter(u => String(u.pickupPointId) === String(currentStop?.id));
+          const handledCount = isOrg ? 0 : stopUsers.filter((u: any) => u.status === targetStatus || u.status === 'absent').length;
+          const totalCount = isOrg ? 0 : stopUsers.length;
+          const targetLat = isOrg ? org?.location?.lat : currentStop?.lat;
+          const targetLng = isOrg ? org?.location?.lng : currentStop?.lng;
 
-            {/* Unified Scroll Section: Targeted + Pending (and optionally Completed) */}
-            <div className="flex-1 flex items-center gap-3 overflow-x-auto scrollbar-hide py-2 pr-4">
-               
-               {/* 1. Completed Stops (Conditional) */}
-               {showCompleted && currentRoute?.pickupPoints?.filter((p: any) => {
-                  const direction = activeTrip?.direction || tripType;
-                  const stopMembers = processedManifest.filter(u => String(u.pickupPointId) === String(p.id));
-                  const allHandled = stopMembers.length > 0 && stopMembers.every(u => isHandled(u, direction));
-                  
-                  // A stop is "completed" ONLY if everyone there is finished
-                  return allHandled && String(p.id) !== String(activeTrip?.currentStopId);
-               }).map((p: any) => (
-                 <button
-                   key={p.id}
-                   onClick={() => setSelectedStopId(p.id)}
-                   className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-600 shadow-sm animate-in zoom-in duration-300"
-                 >
-                    <CheckCircle size={12} />
-                    <span className="text-[10px] font-black uppercase whitespace-nowrap">{p.name}</span>
-                 </button>
-               ))}
+          return (
+            <div className="bg-white/95 backdrop-blur-2xl rounded-3xl p-3.5 sm:p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] border border-white/60 flex items-center justify-between gap-3">
+              <div 
+                className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                onClick={() => {
+                  if (currentStop) setSelectedStopId(currentStop.id);
+                }}
+              >
+                <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-blue-500/30 shrink-0">
+                  {isOrg ? <Shield size={22} /> : <MapPin size={22} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[8px] font-black uppercase tracking-wider rounded-md">
+                      Target Stop
+                    </span>
+                    {!isOrg && (
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate">
+                        {handledCount}/{totalCount} Processed
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 uppercase italic truncate leading-tight">
+                    {name}
+                  </h3>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                    {activeTrip?.direction === 'dropoff' ? 'Next Dropoff Stop' : 'Next Pickup Stop'}
+                  </p>
+                </div>
+              </div>
 
-               {/* 2. Targeted Stop (Always visible/first in main sequence) */}
-               {(() => {
-                 const currentStop = currentRoute?.pickupPoints?.find((p: any) => String(p.id) === String(activeTrip?.currentStopId));
-                 if (!currentStop && activeTrip?.currentStopId !== 'ORG') return null;
-                 
-                 const isOrg = activeTrip?.currentStopId === 'ORG';
-                 const name = isOrg ? (org?.name || 'Organization') : currentStop?.name;
-                 const targetStatus = activeTrip?.direction === 'dropoff' ? 'dropped' : 'picked';
-                 const userCount = isOrg ? 0 : processedManifest.filter(u => String(u.pickupPointId) === String(currentStop?.id)).length;
-                 const handledCount = isOrg ? 0 : processedManifest.filter(u => String(u.pickupPointId) === String(currentStop?.id) && (u.status === targetStatus || u.status === 'absent')).length;
-
-                 return (
-                   <button
-                     onClick={() => !isOrg && setSelectedStopId(currentStop.id)}
-                     className="flex-shrink-0 flex items-center gap-3 px-5 py-3.5 bg-blue-600 text-white rounded-2xl shadow-[0_10px_30px_rgba(37,99,235,0.2)] border border-blue-400 active:scale-95 transition-all min-w-[160px]"
-                   >
-                      <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-blue-600 font-bold text-[10px] shadow-sm">
-                         {isOrg ? <Shield size={14} /> : `${handledCount}/${userCount}`}
-                      </div>
-                      <div className="flex flex-col items-start overflow-hidden">
-                        <span className="text-[8px] font-black uppercase text-blue-200 tracking-widest leading-none mb-1">Current Stop</span>
-                        <span className="text-[11px] font-bold uppercase truncate w-full">{name}</span>
-                      </div>
-                   </button>
-                 );
-               })()}
-
-                {/* 3. Pending Stops Section (Any stop that has pending members and isn't the target) */}
-                {currentRoute?.pickupPoints?.filter((p: any) => {
-                   const stopMembers = processedManifest.filter(u => String(u.pickupPointId) === String(p.id));
-                   const targetStatus = activeTrip?.direction === 'dropoff' ? 'dropped' : 'picked';
-                   const hasPending = stopMembers.length > 0 && stopMembers.some(u => u.status !== targetStatus && u.status !== 'absent');
-                   return hasPending && String(p.id) !== String(activeTrip?.currentStopId);
-                }).map((p: any) => (
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 shrink-0">
+                {isValidCoordinate(targetLat, targetLng) && (
                   <button
-                    key={p.id}
-                    onClick={() => setSelectedStopId(p.id)}
-                    className="flex-shrink-0 flex items-center gap-2 px-4 py-3 bg-white border border-slate-100 rounded-xl text-slate-500 shadow-sm active:scale-95 transition-all"
+                    onClick={() => {
+                      if (mapRef.current && isValidCoordinate(targetLat, targetLng)) {
+                        mapRef.current.flyTo([Number(targetLat), Number(targetLng)], 16);
+                        toast.success(`Centered on ${name}`);
+                      }
+                    }}
+                    className="w-10 h-10 sm:w-11 sm:h-11 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 rounded-2xl flex items-center justify-center transition-all active:scale-95 border border-slate-200/60 shadow-xs cursor-pointer"
+                    title="Center on Target Stop"
                   >
-                     <div className="w-5 h-5 bg-slate-50 rounded-lg flex items-center justify-center text-[10px] font-bold text-slate-400">
-                        {processedManifest.filter(u => String(u.pickupPointId) === String(p.id)).filter((u: any) => {
-                          const targetStatus = activeTrip?.direction === 'dropoff' ? 'dropped' : 'picked';
-                          return u.status !== targetStatus && u.status !== 'absent';
-                        }).length}
-                     </div>
-                     <span className="text-[10px] font-bold uppercase whitespace-nowrap">{p.name}</span>
+                    <Navigation size={18} />
                   </button>
-                ))}
+                )}
+
+                {!isOrg && currentStop && (
+                  <button
+                    onClick={() => setSelectedStopId(currentStop.id)}
+                    className="px-3.5 sm:px-4 py-2.5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-md hover:bg-blue-700 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Users size={14} />
+                    <span>Manifest</span>
+                  </button>
+                )}
+              </div>
             </div>
-         </div>
+          );
+        })()}
       </div>
 
       <AnimatePresence>

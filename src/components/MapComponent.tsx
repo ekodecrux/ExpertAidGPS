@@ -347,6 +347,7 @@ function MobileScrollHelper({ isFullscreen }: { isFullscreen: boolean }) {
 
     // Default when embedded on mobile: disable 1-finger map drag so the page scrolls freely with the user's hand
     map.dragging.disable();
+    container.style.touchAction = 'pan-y';
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length >= 2) {
