@@ -4948,46 +4948,47 @@ async function start() {
   const osrmCache = new Map<string, { data: any, timestamp: number }>();
   const CACHE_TTL = 1000 * 60 * 30; // 30 minutes
 
-  // Proxy for OSRM to bypass client-side fetch restrictions
-  app.get("/api/proxy/osrm/*path", async (req, res) => {
-    const osrmPath = req.params['path'];
-    const fullUrl = req.originalUrl;
-    const queryIndex = fullUrl.indexOf('?');
-    const queryParams = queryIndex !== -1 ? fullUrl.slice(queryIndex) : '';
+  // Proxy for OSRM to bypass client-side fetch restrictions (compatible with Express 5 / path-to-regexp v8)
+  app.use("/api/proxy/osrm", async (req, res) => {
+    // subPath is everything after /api/proxy/osrm
+    const subPath = req.url.replace(/^\//, '');
+    if (!subPath) {
+      return res.status(400).json({ error: "Missing OSRM routing subpath" });
+    }
 
     // Check cache
-    const cacheKey = `${osrmPath}${queryParams}`;
+    const cacheKey = subPath;
     const cached = osrmCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return res.json(cached.data);
     }
 
-    const url = `https://router.project-osrm.org/${osrmPath}${queryParams}`;
-    
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000); // Increased to 8s
+    const candidateUrls = [
+      `https://router.project-osrm.org/${subPath}`,
+      `https://routing.openstreetmap.de/routed-car/${subPath}`
+    ];
 
-    try {
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeout);
-      const contentType = response.headers.get("content-type");
-      
-      if (contentType && contentType.includes("application/json")) {
-        const data = await response.json();
-        osrmCache.set(cacheKey, { data, timestamp: Date.now() });
-        return res.status(response.status).json(data);
-      } else {
-        const text = await response.text();
-        return res.status(response.status).send(text);
+    for (const url of candidateUrls) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        const contentType = response.headers.get("content-type");
+        
+        if (response.ok && contentType && contentType.includes("application/json")) {
+          const data = await response.json();
+          osrmCache.set(cacheKey, { data, timestamp: Date.now() });
+          return res.status(200).json(data);
+        }
+      } catch (err: any) {
+        clearTimeout(timeout);
+        // Fall through to next candidate endpoint
       }
-    } catch (e: any) {
-      clearTimeout(timeout);
-      if (e.name === 'AbortError') {
-        return res.status(504).json({ error: "OSRM request timed out" });
-      }
-      console.error("OSRM proxy failed:", e);
-      res.status(500).json({ error: e.message });
     }
+
+    return res.status(502).json({ error: "All upstream OSRM routing services failed or timed out" });
   });
 
   if (process.env.NODE_ENV !== "production") {

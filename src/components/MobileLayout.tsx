@@ -288,7 +288,7 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
       <main 
         className={cn(
           "flex-1 relative flex flex-col min-h-0",
-          (activeTab === 'map' || activeTab === 'track') ? "overflow-hidden" : "overflow-y-auto overscroll-y-contain"
+          activeTab === 'map' ? "overflow-hidden" : "overflow-y-auto overscroll-y-contain"
         )}
         style={{
           WebkitOverflowScrolling: 'touch',
@@ -298,7 +298,7 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
         <div
           className={cn(
             "flex-1 flex flex-col relative w-full",
-            (activeTab === 'map' || activeTab === 'track') ? "h-full p-0 overflow-hidden" : "p-3 sm:p-4 min-h-full pb-24 sm:pb-28"
+            activeTab === 'map' ? "h-full p-0 overflow-hidden" : "p-3 sm:p-4 min-h-full pb-28 sm:pb-32"
           )}
         >
           {children}

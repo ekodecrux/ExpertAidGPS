@@ -316,8 +316,8 @@ export default function AppShell({ children }: ShellProps) {
       const all: MenuItem[] = [
         { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard, role: ['super_admin', 'org_admin', 'driver', 'user'], category: 'Navigation', path: '/' },
         
-        // Fleet Management (Org Admin)
-        { id: 'map', label: 'Live Bus Tracking', icon: Navigation, role: ['org_admin'], category: 'Fleet', path: '/map' },
+        // Fleet Management (Org Admin & Super Admin)
+        { id: 'map', label: 'Live Bus Tracking', icon: Navigation, role: ['org_admin', 'super_admin'], category: 'Fleet', path: '/map' },
         { id: 'vehicles', label: 'Vehicle Management', icon: Bus, role: ['org_admin'], category: 'Fleet', path: '/vehicles' },
         { id: 'drivers', label: 'Driver Management', icon: Users, role: ['org_admin'], category: 'Fleet', path: '/drivers' },
         { id: 'routes', label: 'Route Planning', icon: Route, role: ['org_admin'], category: 'Fleet', path: '/routes' },

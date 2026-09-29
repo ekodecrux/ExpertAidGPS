@@ -33,15 +33,15 @@
     border: none !important;
   }
 
-  /* Vivid, crystal-clear map basemap rendering across all map components */
+  /* Vivid, colorful, attractive map basemap rendering across all map components */
   .leaflet-tile-pane {
-    filter: saturate(1.22) contrast(1.06) brightness(1.02);
+    filter: saturate(1.35) contrast(1.08) brightness(1.02);
   }
 
   .leaflet-container {
     width: 100% !important;
     height: 100% !important;
-    background: #eef2f6 !important;
+    background: #fdfaf6 !important;
     font-family: inherit !important;
   }
 

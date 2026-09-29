@@ -571,7 +571,7 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
     <motion.div 
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="space-y-6 relative flex flex-col pb-12 w-full max-w-full"
+      className="space-y-6 relative flex flex-col pb-36 w-full max-w-full"
       style={{ touchAction: 'pan-y' }}
     >
       <div className="flex items-center justify-between px-2 gap-2 mb-4">
@@ -683,6 +683,14 @@ export default function UserMapView({ userDbData, userDbDataLoading }: UserMapVi
             );
           })}
         </MapComponent>
+      </div>
+
+      {/* Quick Visual Scroll Helper */}
+      <div className="flex items-center justify-center -my-2">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-slate-100/90 text-slate-500 rounded-full text-[9px] font-black uppercase tracking-widest shadow-xs border border-slate-200/60">
+          <span>Scroll down for trip status & details</span>
+          <span className="text-blue-600 animate-bounce">↓</span>
+        </div>
       </div>
 
       {/* Trip Information */}
