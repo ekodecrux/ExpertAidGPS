@@ -389,12 +389,12 @@ export const isNightTime = (): boolean => {
 // have zero watermarks, and eliminate "Map data not yet available" placeholders.
 export const MAP_LAYERS = {
   standard: {
-    name: 'Clean Streets',
-    tag: 'Clean Street Map',
-    icon: '🗺️',
-    desc: 'Crisp roads, transit stops, landmarks and navigation paths',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    name: 'Vibrant Colorful Map',
+    tag: 'Vibrant Streets',
+    icon: '🎨',
+    desc: 'Colorful roads, transit routes, lush parks and vivid water bodies',
+    url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Tiles style by <a href="https://www.hotosm.org/">HOT</a>',
     subdomains: 'abc',
     maxZoom: 19,
     maxNativeZoom: 19
@@ -411,11 +411,11 @@ export const MAP_LAYERS = {
     maxNativeZoom: 18 // Native zoom 18 upscaled smoothly by Leaflet to 19 so "data not yet available" dummy tile NEVER appears!
   },
   light: {
-    name: 'Clean Streets',
-    tag: 'Clean Street Map',
-    icon: '🗺️',
-    desc: 'Crisp roads, transit stops, landmarks and navigation paths',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    name: 'Vibrant Colorful Map',
+    tag: 'Vibrant Streets',
+    icon: '🎨',
+    desc: 'Colorful roads, transit routes, lush parks and vivid water bodies',
+    url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     subdomains: 'abc',
     maxZoom: 19,
@@ -437,7 +437,7 @@ export const MAP_LAYERS = {
     tag: 'Night Canvas',
     icon: '🌙',
     desc: 'Dark high-contrast navigation mode',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     subdomains: 'abc',
     maxZoom: 19,
@@ -924,7 +924,19 @@ export default function MapComponent({
           url={activeLayerConfig.url}
           subdomains={activeLayerConfig.subdomains || 'abc'}
           maxZoom={19}
-          maxNativeZoom={activeLayerConfig.maxNativeZoom || 18}
+          maxNativeZoom={activeLayerConfig.maxNativeZoom || 19}
+          eventHandlers={{
+            tileerror: (error: any) => {
+              const img = error?.tile;
+              if (img && img.dataset && !img.dataset.fallbackTried) {
+                img.dataset.fallbackTried = 'true';
+                const coords = error?.coords;
+                if (coords) {
+                  img.src = `https://tile.openstreetmap.org/${coords.z}/${coords.x}/${coords.y}.png`;
+                }
+              }
+            }
+          }}
         />
 
         <ChangeView center={sanitizedCenter} zoom={sanitizedZoom} bounds={bounds} />
