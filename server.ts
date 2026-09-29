@@ -5012,7 +5012,10 @@ async function start() {
       }
     });
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distRoot = path.join(process.cwd(), "dist");
+    const distPath = fs.existsSync(path.join(distRoot, "public"))
+      ? path.join(distRoot, "public")
+      : distRoot;
     app.use(express.static(distPath));
     app.get("*all", (req, res) => {
       if (req.originalUrl.startsWith('/api')) {
