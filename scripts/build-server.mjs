@@ -4,8 +4,8 @@ await build({
   entryPoints: ['server.ts'],
   bundle: true,
   platform: 'node',
-  format: 'cjs',
+  format: 'esm',
   packages: 'external',
   sourcemap: true,
-  outfile: 'dist/server.cjs',
+  outfile: 'dist/index.js',
 });
