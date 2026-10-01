@@ -101,11 +101,18 @@
     }
   }
 
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  /* Invisible scrollbars that allow smooth scrolling but do not display */
+  .scrollbar-hide::-webkit-scrollbar,
+  .custom-scrollbar::-webkit-scrollbar,
+  .no-scrollbar::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  .scrollbar-hide,
+  .custom-scrollbar,
+  .no-scrollbar {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
   }
 }

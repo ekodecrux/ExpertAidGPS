@@ -303,7 +303,7 @@ export class EmulatedMySQLConnection {
         const whereClause = selectMatch[3] || "";
         const tableRows = db[tableName] || [];
 
-        const filtered = tableRows.filter((r: any) => rowMatchesWhere(r, whereClause));
+        let filtered = tableRows.filter((r: any) => rowMatchesWhere(r, whereClause));
         
         // Auto-seed user logic if trying to verify an email or uid and they aren't seeded yet
         if (tableName === "users" && filtered.length === 0 && whereClause.toLowerCase().includes("uid")) {
@@ -342,6 +342,17 @@ export class EmulatedMySQLConnection {
           }
         }
 
+        if (tableName === "organizations") {
+          filtered = filtered.map((o: any) => {
+            const l = o.logoUrl || o.logo || "";
+            return {
+              ...o,
+              logo: l,
+              logoUrl: l
+            };
+          });
+        }
+
         return [filtered, []];
       }
       return [[], []];
@@ -372,10 +383,18 @@ export class EmulatedMySQLConnection {
           (db as any)[tableName] = [];
         }
         
-        // Remove duplicate if already exists
+        // Merge with existing record if already exists (for ON DUPLICATE KEY UPDATE)
         const pkValue = newRecord[idCol];
+        const existingRecord = ((db as any)[tableName] || []).find((r: any) => r[idCol] === pkValue);
         (db as any)[tableName] = db[tableName].filter((r: any) => r[idCol] !== pkValue);
-        db[tableName].push(newRecord);
+        
+        const mergedRecord = { ...existingRecord, ...newRecord };
+        if (tableName === "organizations") {
+          const l = mergedRecord.logoUrl || mergedRecord.logo || "";
+          mergedRecord.logoUrl = l;
+          mergedRecord.logo = l;
+        }
+        db[tableName].push(mergedRecord);
 
         writeDB(db);
         return [{ affectedRows: 1, insertId: 0 }, []];
@@ -413,7 +432,13 @@ export class EmulatedMySQLConnection {
           db[tableName] = db[tableName].map((r: any) => {
             if (rowMatchesWhere(r, whereClause)) {
               updatedCount++;
-              return { ...r, ...assignments };
+              const updated = { ...r, ...assignments };
+              if (tableName === "organizations") {
+                const l = updated.logoUrl !== undefined ? updated.logoUrl : (updated.logo !== undefined ? updated.logo : (r.logoUrl || r.logo || ""));
+                updated.logoUrl = l;
+                updated.logo = l;
+              }
+              return updated;
             }
             return r;
           });

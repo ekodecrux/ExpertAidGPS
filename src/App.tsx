@@ -50,14 +50,28 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="flex flex-col items-center text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-4 animate-pulse">
-            <span className="text-white font-black text-2xl tracking-tighter italic">GPS</span>
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-4 relative overflow-hidden select-none">
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-500/5 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/5 rounded-full blur-3xl"></div>
+        </div>
+
+        <div className="max-w-md w-full bg-white rounded-[2.25rem] shadow-xl overflow-hidden border border-slate-100/85 z-10 relative p-8 flex flex-col items-center text-center">
+          <div className="mx-auto mb-4 transition-all duration-300">
+            <img 
+              src="/instantexpert-logo.png" 
+              alt="ExpertAid" 
+              className="h-20 mx-auto object-contain animate-pulse" 
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+              }}
+            />
           </div>
-          <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mb-3"></div>
-          <p className="text-white font-black tracking-widest text-[11px] uppercase">Expert GPS Tracking</p>
-          <p className="text-slate-400 text-[10px] mt-1 font-medium">Initializing secure workspace...</p>
+          <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 uppercase">Expert GPS Tracking</h2>
+          <p className="text-slate-400 font-bold text-[9px] uppercase tracking-[0.2em] mt-1">Initializing secure session...</p>
         </div>
       </div>
     );

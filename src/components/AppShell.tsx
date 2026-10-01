@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Users, Route, Bus, LogOut, Settings, Bell, Map as MapIcon, ShieldCheck, Briefcase, ChevronLeft, ChevronRight, UserCircle, Users2, MapPin, Building2, School, GraduationCap, Navigation, Activity, X, Edit2, Save, Key, Mail, Shield } from 'lucide-react';
+import { LayoutDashboard, Users, Route, Bus, LogOut, Settings, Bell, Map as MapIcon, ShieldCheck, Briefcase, ChevronLeft, ChevronRight, ChevronDown, UserCircle, Users2, MapPin, Building2, School, GraduationCap, Navigation, Activity, X, Edit2, Save, Key, Mail, Shield } from 'lucide-react';
+import ExpertGpsLogo from './ExpertGpsLogo';
 import { cn, getLocalAvatar, getUserAvatar, getLocalIcon } from '../lib/utils';
 import { Link, useLocation } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where } from 'firebase/firestore';
@@ -355,14 +356,13 @@ export default function AppShell({ children }: ShellProps) {
     <div className="h-screen bg-[#F8FAFC] flex flex-col md:flex-row overflow-hidden relative">
       {/* Mobile Nav Header */}
       <div className="md:hidden bg-white p-4 flex items-center justify-between z-30 shrink-0 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center overflow-hidden font-sans shadow-lg shadow-blue-600/20">
-              <Navigation className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-white border border-slate-200/90 shadow-xs flex items-center justify-center p-1 shrink-0 overflow-hidden">
+              <ExpertGpsLogo className="w-full h-full" />
             </div>
-            <div>
-              <span className="text-slate-900 font-black text-lg tracking-tight leading-none block italic uppercase">Expert GPS</span>
-              <span className="text-[9px] text-blue-600 font-black uppercase tracking-widest leading-none">Intelligence Hub</span>
-            </div>
+            <span className="text-slate-900 font-black text-lg tracking-tight leading-none italic uppercase">
+              Expert GPS
+            </span>
           </div>
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -387,7 +387,7 @@ export default function AppShell({ children }: ShellProps) {
 
       {/* Navigation Sidebar */}
       <aside className={cn(
-        "bg-white border-r border-slate-100 flex-shrink-0 transition-all duration-300 flex flex-col z-[9999] md:z-50 absolute md:relative h-full shadow-2xl md:shadow-none",
+        "bg-white border-r border-slate-100 flex-shrink-0 transition-all duration-300 flex flex-col z-[9999] md:z-50 absolute md:relative h-full shadow-2xl md:shadow-none overflow-visible",
         isSidebarOpen ? "w-64 translate-x-0" : "w-16 md:w-16 -translate-x-full md:translate-x-0"
       )}>
         <div className={cn(
@@ -395,14 +395,13 @@ export default function AppShell({ children }: ShellProps) {
           isSidebarOpen ? "p-4 md:p-6 justify-between" : "p-2 justify-center"
         )}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-blue-600/20 overflow-hidden font-sans border-2 border-white/20">
-              <Navigation className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/90 shadow-xs flex items-center justify-center shrink-0 p-1 overflow-hidden transition-transform hover:scale-105">
+              <ExpertGpsLogo className="w-full h-full" />
             </div>
             {isSidebarOpen && (
-              <div className="flex flex-col">
-                <span className="text-slate-900 font-black text-xl tracking-tighter leading-none italic uppercase">Expert GPS</span>
-                <span className="text-[9px] text-blue-600 font-black uppercase tracking-[0.2em] mt-0.5">Fleet Management</span>
-              </div>
+              <span className="text-slate-900 font-black text-xl tracking-tighter leading-none italic uppercase truncate">
+                Expert GPS
+              </span>
             )}
           </div>
           
@@ -419,12 +418,14 @@ export default function AppShell({ children }: ShellProps) {
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className={cn(
-              "hidden md:flex p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors shrink-0",
-              !isSidebarOpen && "absolute -right-3 top-1/2 -translate-y-1/2 bg-white text-blue-600 rounded-full border border-slate-200 p-0.5 shadow-md z-50 hover:bg-blue-50"
+              "hidden md:flex items-center justify-center transition-all shrink-0 cursor-pointer",
+              isSidebarOpen 
+                ? "p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl" 
+                : "absolute -right-3.5 top-1/2 -translate-y-1/2 w-7 h-7 bg-white text-blue-600 rounded-full border border-slate-200 shadow-md hover:bg-blue-50 hover:scale-110 active:scale-95 z-[100]"
             )}
             title={isSidebarOpen ? "Collapse Menu" : "Expand Menu"}
           >
-            {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-4 h-4" />}
+            {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-4 h-4 ml-0.5" />}
           </button>
         </div>
 
@@ -432,7 +433,7 @@ export default function AppShell({ children }: ShellProps) {
           {/* User profile removed from sidebar as per request */}
         </div>
 
-        <nav className="flex-1 px-2 py-2 space-y-1 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-2 py-2 space-y-1 overflow-y-auto scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {menuItems.map(item => (
             <Link
               key={item.id}
@@ -486,86 +487,69 @@ export default function AppShell({ children }: ShellProps) {
       <main className="flex-1 flex flex-col overflow-hidden relative">
         {/* Header Bar */}
         <header className="h-20 md:h-24 bg-white border-b border-slate-100 flex items-center justify-between px-6 shrink-0 relative z-40 transition-all">
-          <div className="flex items-center gap-4 flex-1 overflow-hidden">
-            {userData?.orgId && org ? (
-              <div className="flex items-center gap-4 md:gap-6 overflow-hidden">
-                <div className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-slate-50 border border-slate-100 p-1.5 items-center justify-center shrink-0 shadow-sm transition-all group-hover:scale-105 font-sans overflow-hidden">
-                  {(() => {
-                    const isCollege = org?.eduType === 'College' || (!org?.eduType && (org?.name?.toLowerCase().includes('college') || org?.name?.toLowerCase().includes('university')));
-                    const defaultIcon = org?.sector === 'Education'
-                      ? (isCollege ? 'graduation-cap' : 'school')
-                      : (org?.sector === 'Healthcare'
-                        ? 'hospital'
-                        : (org?.sector === 'Government'
-                          ? 'museum'
-                          : 'commercial'));
-                    const logoSrc = org?.logo || org?.logoUrl || getLocalIcon(defaultIcon);
-                    return (
-                      <img src={logoSrc} alt={org?.name} className="w-full h-full object-contain mix-blend-multiply" referrerPolicy="no-referrer" />
-                    );
-                  })()}
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <div className="items-center gap-2 mb-0.5 hidden md:flex">
-                    <h2 className="text-sm md:text-lg font-black text-slate-900 tracking-tight leading-none uppercase truncate">{org?.name}</h2>
-                    <span className="hidden md:inline-block px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[8px] md:text-[9px] font-black uppercase tracking-widest border border-blue-100 shrink-0">
-                      {org?.sector || 'Logistics'}
-                    </span>
+          {/* Header Bar Left - Organization Info & Page Title */}
+          <div className="flex items-center gap-3 md:gap-4 flex-1 overflow-hidden">
+            {(() => {
+              const defaultIcon = org?.sector === 'Education'
+                ? ((org?.eduType === 'College' || (!org?.eduType && (org?.name?.toLowerCase().includes('college') || org?.name?.toLowerCase().includes('university')))) ? 'graduation-cap' : 'school')
+                : (org?.sector === 'Healthcare'
+                  ? 'hospital'
+                  : (org?.sector === 'Government'
+                    ? 'museum'
+                    : 'commercial'));
+
+              const displayLogo = org?.logo || org?.logoUrl || userData?.avatarUrl || (userData as any)?.photoURL || getLocalIcon(defaultIcon);
+              const displayName = org?.name || userData?.name || (userData?.role === 'super_admin' ? 'Master Control Hub' : 'Fleet Management');
+              const displayRole = userData?.role?.replace('_', ' ') || 'Admin';
+              const currentCrumb = menuItems.find(item => item.path === location.pathname)?.label || (userData?.role === 'org_admin' ? 'Management' : 'Dashboard');
+
+              return (
+                <div className="flex items-center gap-3 md:gap-4 min-w-0">
+                  {/* Organization Logo - Prominently Displayed Badge */}
+                  <div className="h-12 md:h-14 min-w-12 max-w-[140px] px-2.5 py-1.5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex items-center justify-center shrink-0 transition-all hover:shadow-md">
+                    <img 
+                      key={`appshell-logo-${org?.id || ''}-${org?.logoUrl || org?.logo || ''}`}
+                      src={displayLogo} 
+                      alt={displayName} 
+                      className="h-full w-auto max-h-9 md:max-h-10 max-w-full object-contain" 
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = getLocalIcon(defaultIcon) || '/instantexpert-logo.png';
+                      }}
+                    />
                   </div>
-                  <div className="flex items-center gap-2.5 text-[10px] md:text-[10px] font-bold text-slate-400 truncate uppercase tracking-widest">
-                   <span className="hidden md:flex text-slate-900 items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-white border border-slate-200 shadow-sm overflow-hidden flex items-center justify-center p-0.5 shrink-0">
-                        <img 
-                          src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
-                          className="w-full h-full object-contain rounded-full" 
-                        />
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="truncate leading-none mb-1 font-black text-slate-900">
-                          {(!userData?.name || userData.name.toUpperCase() === 'ANONYMOUS') 
-                            ? (userData?.role === 'super_admin' ? 'Super Admin' : 'Admin') 
-                            : userData.name}
+
+                  {/* Organization Name, Role Badge and Route Breadcrumb */}
+                  <div className="flex flex-col min-w-0 justify-center">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm md:text-base font-black text-slate-900 tracking-tight leading-none uppercase truncate max-w-[200px] sm:max-w-[320px] lg:max-w-none">
+                        {displayName}
+                      </h2>
+                      {org?.sector && (
+                        <span className="hidden lg:inline-block px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[8px] md:text-[9px] font-black uppercase tracking-widest border border-slate-200 shrink-0">
+                          {org.sector}
                         </span>
-                        <span className="text-[8px] md:text-[9px] font-black text-blue-600 uppercase tracking-[0.1em] leading-none bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1 w-max">
-                          <Shield className="w-2 h-2" />
-                          {userData?.role?.replace('_', ' ')}
-                        </span>
-                      </div>
-                   </span>
-                    <span className="hidden md:inline text-slate-300">|</span>
-                    <span className="text-blue-600 font-black text-base md:text-xs tracking-tight uppercase leading-none italic shrink-0">
-                      {menuItems.find(item => item.path === location.pathname)?.label || (userData?.role === 'org_admin' ? 'Management' : 'Overview')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-400 overflow-hidden uppercase tracking-widest">
-                   <span className="hidden md:flex text-slate-900 items-center gap-2 min-w-0">
-                      <div className="w-5 h-5 rounded-full bg-white border border-slate-200 shadow-sm overflow-hidden flex items-center justify-center p-0.5 shrink-0">
-                        <img 
-                          src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
-                          className="w-full h-full object-contain rounded-full" 
-                        />
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                      <span className="truncate leading-none mb-1 font-black text-slate-900">
-                        {(!userData?.name || userData.name.toUpperCase() === 'ANONYMOUS') 
-                          ? (userData?.role === 'super_admin' ? 'Super Admin' : 'Administrator') 
-                          : userData.name}
-                      </span>
-                      <span className="text-[8px] md:text-[9px] font-black text-blue-600 uppercase tracking-[0.1em] leading-none bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1 w-max">
-                        <Shield className="w-2 h-2" />
-                        {userData?.role?.replace('_', ' ')}
+                      )}
+                      <span className="text-slate-300 font-bold hidden sm:inline">/</span>
+                      <span className="text-blue-600 font-black text-xs md:text-sm tracking-tight uppercase italic truncate hidden sm:inline">
+                        {currentCrumb}
                       </span>
                     </div>
-                   </span>
-                <span className="hidden md:inline text-slate-300">/</span>
-                <span className="text-blue-600 font-black italic">
-                   {menuItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
-                </span>
-              </div>
-            )}
+
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[8px] md:text-[9px] font-black text-blue-600 uppercase tracking-[0.1em] leading-none bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 flex items-center gap-1 shadow-2xs w-max">
+                        <Shield className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                        {displayRole}
+                      </span>
+                      {/* Mobile breadcrumb visible when top one is hidden */}
+                      <span className="sm:hidden text-blue-600 font-black text-[10px] uppercase italic truncate">
+                        • {currentCrumb}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="flex items-center gap-4 md:gap-6 ml-4 shrink-0">
@@ -743,13 +727,18 @@ export default function AppShell({ children }: ShellProps) {
                 setIsProfileOpen(true);
                 setNewName(userData?.name || '');
               }}
-              className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white border border-slate-200/80 overflow-hidden shrink-0 hover:ring-4 hover:ring-blue-500/10 transition-all active:scale-90 flex items-center justify-center p-0.5 shadow-sm"
+              title="Admin Profile & Settings"
+              className="h-11 md:h-12 min-w-11 md:min-w-12 px-2 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-blue-400 hover:ring-4 hover:ring-blue-500/10 transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer group"
             >
-              <img 
-                src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
-                alt="Avatar" 
-                className="w-full h-full object-contain rounded-full"
-              />
+              <div className="h-8 md:h-9 w-auto max-w-[72px] flex items-center justify-center overflow-hidden shrink-0">
+                <img 
+                  src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
+                  alt="Avatar" 
+                  className="h-full w-auto max-w-full object-contain" 
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors hidden sm:block" />
             </button>
           </div>
         </header>

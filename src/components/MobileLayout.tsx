@@ -123,7 +123,7 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
       {/* Dynamic Header */}
       <header className="bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3 flex items-center justify-between z-[6000] shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-900 overflow-hidden flex items-center justify-center border-2 border-white shadow-md cursor-pointer" onClick={() => onTabChange('profile')}>
+          <div className="w-12 h-12 rounded-xl bg-white border border-slate-200/90 shadow-xs overflow-hidden flex items-center justify-center p-1.5 cursor-pointer active:scale-95 transition-transform" onClick={() => onTabChange('profile')}>
             {(() => {
               const isCollege = org?.eduType === 'College' || (!org?.eduType && (org?.name?.toLowerCase().includes('college') || org?.name?.toLowerCase().includes('university')));
               const defaultIcon = org?.sector === 'Education'
@@ -133,22 +133,31 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
                   : (org?.sector === 'Government'
                     ? 'museum'
                     : 'commercial'));
-              const logoSrc = org?.logo || org?.logoUrl || getLocalIcon(defaultIcon);
+              const logoSrc = org?.logo || org?.logoUrl || userData?.avatarUrl || getLocalIcon(defaultIcon);
               return (
-                <img src={logoSrc} alt="Org Logo" className="w-full h-full object-contain p-0.5 bg-slate-50" referrerPolicy="no-referrer" />
+                <img 
+                  key={`mobile-org-logo-${org?.id || ''}-${org?.logoUrl || org?.logo || ''}`}
+                  src={logoSrc} 
+                  alt="Org Logo" 
+                  className="w-full h-full object-contain" 
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = getLocalIcon(defaultIcon);
+                  }}
+                />
               );
             })()}
           </div>
           <div>
             <h1 className="text-xs font-black text-slate-900 uppercase tracking-tighter italic leading-none truncate max-w-[150px]">
-              {org?.name || 'Expert GPS'}
+              {org?.name || userData?.name || 'Expert GPS'}
             </h1>
             <div className="flex items-center gap-2 mt-1.5 px-0.5 group">
-              <div className="w-5 h-5 rounded-full bg-slate-100 border-2 border-white shadow-sm overflow-hidden flex-shrink-0">
+              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 shadow-2xs overflow-hidden flex-shrink-0 flex items-center justify-center p-0.5">
                 <img 
                   src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
                   alt="driver" 
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               </div>
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate max-w-[120px] transition-colors group-hover:text-blue-600">

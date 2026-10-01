@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bus, Users, Route, TrendingUp, AlertCircle, Calendar, ShieldCheck, MapPin, Plus, Search, Trash2, Edit2, Edit3, X, Save, UserCheck, UserPlus, Navigation, ArrowRight, Gauge, Activity, Maximize2, UserCircle, Map as MapIcon, ChevronRight, Mail, Building2, CheckCircle, Check, Pencil, Link2Off, ChevronDown, School, GraduationCap, Clock, Download, Eye } from 'lucide-react';
+import { Bus, Users, Route, TrendingUp, AlertCircle, Calendar, ShieldCheck, MapPin, Plus, Search, Trash2, Edit2, Edit3, X, Save, UserCheck, UserPlus, Navigation, ArrowRight, Gauge, Activity, Maximize2, UserCircle, Map as MapIcon, ChevronRight, Mail, Building2, CheckCircle, Check, Pencil, Link2Off, ChevronDown, School, GraduationCap, Clock, Download, Eye, Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -6954,6 +6954,63 @@ function Settings({ org, classes, orgId, isEducation, isCollege, members, onRefr
     }
   };
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500 * 1024) {
+      toast.error('Logo file too large. Max 500KB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+      const toastId = toast.loading('Uploading organization logo...');
+      try {
+        if (!orgId) throw new Error('Missing Organization ID');
+        await saveMySQLRecord('update', 'organizations', orgId, {
+          logo: base64,
+          logoUrl: base64
+        });
+        try {
+          await setDoc(doc(db, 'organizations', orgId), {
+            logo: base64,
+            logoUrl: base64
+          }, { merge: true });
+        } catch (fsErr) {
+          console.warn('Firestore logo mirror notice:', fsErr);
+        }
+        toast.success('Organization logo updated dynamically!', { id: toastId });
+        if (onRefresh) onRefresh();
+      } catch (err: any) {
+        toast.error('Failed to update logo: ' + (err?.message || 'Error'), { id: toastId });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = async () => {
+    const toastId = toast.loading('Removing organization logo...');
+    try {
+      if (!orgId) throw new Error('Missing Organization ID');
+      await saveMySQLRecord('update', 'organizations', orgId, {
+        logo: '',
+        logoUrl: ''
+      });
+      try {
+        await setDoc(doc(db, 'organizations', orgId), {
+          logo: '',
+          logoUrl: ''
+        }, { merge: true });
+      } catch (fsErr) {
+        console.warn('Firestore logo reset notice:', fsErr);
+      }
+      toast.success('Organization logo reset to default icon', { id: toastId });
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      toast.error('Failed to reset logo: ' + (err?.message || 'Error'), { id: toastId });
+    }
+  };
+
   const handleUpdateEduType = async (type: 'School' | 'College') => {
     try {
       await saveMySQLRecord('update', 'organizations', orgId, {
@@ -7174,6 +7231,53 @@ function Settings({ org, classes, orgId, isEducation, isCollege, members, onRefr
 
       <div className="grid grid-cols-1 gap-8">
         <div className="space-y-6">
+          {/* Organization Logo & Branding Card */}
+          <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-center p-2 shrink-0 overflow-hidden">
+                  <img 
+                    key={`org-settings-logo-${org?.logoUrl || org?.logo || ''}`}
+                    src={org?.logoUrl || org?.logo || orgIconUrl} 
+                    alt={org?.name || 'Organization Logo'} 
+                    className="w-full h-full object-contain"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = orgIconUrl;
+                    }}
+                  />
+                </div>
+                <div>
+                  <h4 className="text-xl font-black text-slate-900 uppercase italic leading-none">Organization Logo</h4>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                    Display dynamically across fleet dashboard, headers, and passenger tracking apps
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <label className="cursor-pointer bg-slate-900 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-sm active:scale-95 inline-flex items-center justify-center gap-2 flex-1 md:flex-none">
+                  <Upload className="w-3.5 h-3.5" />
+                  Replace Logo
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                  />
+                </label>
+                {(org?.logo || org?.logoUrl) && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveLogo}
+                    className="px-4 py-2.5 border border-red-200 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-all cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="flex items-center gap-4">

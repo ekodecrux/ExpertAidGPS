@@ -804,6 +804,14 @@ export default function SuperAdminDashboard({ view = 'overview' }: { view?: 'ove
 
       await saveMySQLRecord('insert', 'organizations', generatedId, newOrgData);
 
+      try {
+        await setDoc(doc(db, 'organizations', generatedId), newOrgData, { merge: true });
+      } catch (fsErr) {
+        console.warn('Direct Firestore organization insert notice:', fsErr);
+      }
+
+      setOrgs(prev => [{ id: generatedId, ...newOrgData } as any, ...prev]);
+
       // Create admin user for this organization
       try {
         let idToken = await auth.currentUser?.getIdToken().catch(() => null);
@@ -967,6 +975,7 @@ export default function SuperAdminDashboard({ view = 'overview' }: { view?: 'ove
       setNote('');
       
       toast.success('Client activated and synchronized successfully!', { id: toastId });
+      fetchAdminData();
     } catch (error: any) {
       console.error("Client creation error:", error);
       handleFirestoreError(error, OperationType.CREATE, 'organizations');
@@ -1396,7 +1405,18 @@ export default function SuperAdminDashboard({ view = 'overview' }: { view?: 'ove
                                 : 'commercial'));
                           const logoSrc = org.logoUrl || org.logo || getLocalIcon(defaultIcon);
                           return (
-                            <img src={logoSrc} alt={org.name} className="w-8 h-8 rounded-lg object-contain bg-slate-100 p-1" referrerPolicy="no-referrer" />
+                            <div className="w-9 h-9 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                              <img 
+                                key={`${org.id}-${org.logoUrl || org.logo || ''}`}
+                                src={logoSrc} 
+                                alt={org.name} 
+                                className="w-full h-full object-contain" 
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = getLocalIcon(defaultIcon);
+                                }} 
+                              />
+                            </div>
                           );
                         })()}
                         <div>
@@ -2863,6 +2883,16 @@ export default function SuperAdminDashboard({ view = 'overview' }: { view?: 'ove
                   onClick={async () => {
                     try {
                       const finalLogo = selectedOrg.logoUrl || selectedOrg.logo || '';
+                      
+                      // 1. Immediately update local React state for instantaneous UI responsiveness
+                      setOrgs(prevOrgs => prevOrgs.map(o => o.id === selectedOrg.id ? {
+                        ...o,
+                        ...selectedOrg,
+                        logo: finalLogo,
+                        logoUrl: finalLogo
+                      } : o));
+
+                      // 2. Persist to MySQL database
                       await saveMySQLRecord('update', 'organizations', selectedOrg.id, {
                         name: selectedOrg.name,
                         email: selectedOrg.email,
@@ -2876,10 +2906,29 @@ export default function SuperAdminDashboard({ view = 'overview' }: { view?: 'ove
                         onboardDate: safeDate(selectedOrg.onboardDate).toISOString().split('T')[0],
                         expiryDate: safeDate(selectedOrg.expiryDate).toISOString().split('T')[0]
                       });
+
+                      // 3. Mirror directly to Firestore for active listeners & mobile clients
+                      try {
+                        await setDoc(doc(db, 'organizations', selectedOrg.id), {
+                          name: selectedOrg.name,
+                          email: selectedOrg.email,
+                          mobile: selectedOrg.mobile,
+                          logo: finalLogo,
+                          logoUrl: finalLogo,
+                          sector: selectedOrg.sector,
+                          subscriptionPlan: selectedOrg.subscriptionPlan,
+                          status: selectedOrg.status,
+                          address: selectedOrg.address || ''
+                        }, { merge: true });
+                      } catch (fsErr) {
+                        console.warn('Direct Firestore client update notice:', fsErr);
+                      }
+
                       toast.success('Client profile synchronized');
                       setIsEditModalOpen(false);
-                    } catch (e) {
-                      toast.error('Synchronization failed');
+                      fetchAdminData();
+                    } catch (e: any) {
+                      toast.error('Synchronization failed: ' + (e?.message || 'Error'));
                     }
                   }}
                   className="flex-[2] bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-blue-100 active:scale-[0.98] transition-all hover:from-blue-700 hover:to-indigo-700"
