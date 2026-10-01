@@ -48,7 +48,8 @@ function AppContent() {
     return <PrivacyPolicyPage />;
   }
 
-  if (loading) {
+  // Only display initialization screen if actively restoring a known logged-in session from storage
+  if (loading && !userData && typeof window !== 'undefined' && localStorage.getItem("expert_gps_fallback_token")) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-4 relative overflow-hidden select-none">
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">

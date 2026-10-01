@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
     } catch (e) {}
-    return true;
+    return false;
   });
 
   useEffect(() => {
@@ -298,7 +298,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginEmail = async (email: string, pass: string) => {
     sessionStorage.setItem('is_signing_in', 'true');
-    setLoading(true);
     try {
       let token = "";
       let resUser: any = null;

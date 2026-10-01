@@ -306,7 +306,11 @@ export default function Login() {
               disabled={isSubmitting}
               className="w-full bg-slate-900 text-white font-black text-[9px] sm:text-[10px] uppercase tracking-[0.2em] py-3.5 rounded-2xl flex items-center justify-center hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 active:scale-95 disabled:opacity-50 border border-white/10 mt-1 cursor-pointer"
             >
-              <LogIn className="w-3.5 h-3.5 mr-3" />
+              {isSubmitting ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2.5 shrink-0" />
+              ) : (
+                <LogIn className="w-3.5 h-3.5 mr-3 shrink-0" />
+              )}
               {isSubmitting ? 'Authenticating...' : 'Commence Session'}
             </button>
           </form>
