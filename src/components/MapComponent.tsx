@@ -386,63 +386,85 @@ export const isNightTime = (): boolean => {
   return isNightHour || prefersDark;
 };
 
-// Reliable, high-resolution global tile layers that never require API keys,
-// have zero watermarks, and eliminate "Map data not yet available" placeholders.
+// High-resolution Google Maps tile layers providing all street details, building outlines,
+// landmarks, transit stops, and POIs exactly matching standard Google Maps.
 export const MAP_LAYERS = {
   standard: {
-    name: 'Vibrant Colorful Map',
-    tag: 'Vibrant Streets',
-    icon: '🎨',
-    desc: 'Colorful roads, transit routes, lush parks and vivid water bodies',
-    url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Tiles style by <a href="https://www.hotosm.org/">HOT</a>',
-    subdomains: 'abc',
-    maxZoom: 19,
-    maxNativeZoom: 19
+    name: 'Google Streets',
+    tag: 'Standard Road Map',
+    icon: '🗺️',
+    desc: 'Google Maps street layout with landmarks, building footprints, house numbers, and POIs',
+    url: 'https://mt{s}.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 22,
+    maxNativeZoom: 20
   },
   satellite: {
-    name: 'Satellite View',
-    tag: 'Aerial Imagery',
+    name: 'Google Satellite',
+    tag: 'Satellite & Roads',
     icon: '🛰️',
-    desc: 'High-resolution overhead satellite photography',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, Maxar',
-    subdomains: 'abc',
-    maxZoom: 19,
-    maxNativeZoom: 18 // Native zoom 18 upscaled smoothly by Leaflet to 19 so "data not yet available" dummy tile NEVER appears!
+    desc: 'High-resolution Google aerial satellite photography with street overlays and labels',
+    url: 'https://mt{s}.google.com/vt/lyrs=y&hl=en&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 22,
+    maxNativeZoom: 20
   },
-  light: {
-    name: 'Vibrant Colorful Map',
-    tag: 'Vibrant Streets',
-    icon: '🎨',
-    desc: 'Colorful roads, transit routes, lush parks and vivid water bodies',
-    url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    subdomains: 'abc',
-    maxZoom: 19,
-    maxNativeZoom: 19
+  traffic: {
+    name: 'Live Traffic',
+    tag: 'Real-time Traffic',
+    icon: '🚦',
+    desc: 'Google Maps real-time traffic flow indicators, delays, and transit routes',
+    url: 'https://mt{s}.google.com/vt/lyrs=m,traffic&hl=en&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 22,
+    maxNativeZoom: 20
   },
-  topo: {
-    name: 'Topographic',
-    tag: 'Terrain & Elevation',
+  terrain: {
+    name: 'Google Terrain',
+    tag: 'Elevation & Relief',
     icon: '⛰️',
-    desc: 'Contours, relief and terrain elevations',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; National Geographic, Esri, USGS',
-    subdomains: 'abc',
-    maxZoom: 19,
+    desc: 'Google Maps topographic relief, elevation contours, and landscape details',
+    url: 'https://mt{s}.google.com/vt/lyrs=p&hl=en&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 20,
     maxNativeZoom: 18
   },
+  light: {
+    name: 'Google Streets',
+    tag: 'Standard Road Map',
+    icon: '🗺️',
+    desc: 'Google Maps street layout with landmarks, building footprints, house numbers, and POIs',
+    url: 'https://mt{s}.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 22,
+    maxNativeZoom: 20
+  },
   dark: {
-    name: 'Night Mode',
-    tag: 'Night Canvas',
-    icon: '🌙',
-    desc: 'Dark high-contrast navigation mode',
-    url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    subdomains: 'abc',
-    maxZoom: 19,
-    maxNativeZoom: 19
+    name: 'Live Traffic',
+    tag: 'Real-time Traffic',
+    icon: '🚦',
+    desc: 'Google Maps real-time traffic flow indicators, delays, and transit routes',
+    url: 'https://mt{s}.google.com/vt/lyrs=m,traffic&hl=en&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 22,
+    maxNativeZoom: 20
+  },
+  topo: {
+    name: 'Google Terrain',
+    tag: 'Elevation & Relief',
+    icon: '⛰️',
+    desc: 'Google Maps topographic relief, elevation contours, and landscape details',
+    url: 'https://mt{s}.google.com/vt/lyrs=p&hl=en&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 20,
+    maxNativeZoom: 18
   }
 };
 
@@ -451,6 +473,7 @@ export type MapLayerType = keyof typeof MAP_LAYERS;
 interface CustomControlsProps {
   mapType: MapLayerType;
   onToggleMapType: () => void;
+  onSelectMapType?: (type: MapLayerType) => void;
   hideMapStyles?: boolean;
   position?: 'top-right' | 'bottom-right';
   driverCoords?: { lat: number; lng: number } | null;
@@ -462,6 +485,7 @@ interface CustomControlsProps {
 function CustomControls({ 
   mapType,
   onToggleMapType,
+  onSelectMapType,
   hideMapStyles = false, 
   position = 'top-right',
   driverCoords,
@@ -471,6 +495,7 @@ function CustomControls({
 }: CustomControlsProps) {
   const map = useMap();
   const [isLocating, setIsLocating] = useState(false);
+  const [isLayersOpen, setIsLayersOpen] = useState(false);
 
   const controlCallback = useCallback((node: HTMLDivElement | null) => {
     if (node) {
@@ -595,13 +620,13 @@ function CustomControls({
           type="button"
           onClick={(e) => { 
             e.stopPropagation(); 
-            if (map.getZoom() < 19) {
+            if (map.getZoom() < 21) {
               map.zoomIn(); 
             } else {
               safeToast.success('Maximum zoom level reached', { id: 'max-zoom' });
             }
           }}
-          className="w-11 h-10 flex items-center justify-center text-slate-700 hover:bg-slate-100/80 border-b border-slate-100 transition-colors active:scale-95"
+          className="w-11 h-10 flex items-center justify-center text-slate-700 hover:bg-slate-100/80 border-b border-slate-100 transition-colors active:scale-95 cursor-pointer"
           title="Zoom In"
         >
           <Plus className="w-4 h-4" />
@@ -614,31 +639,79 @@ function CustomControls({
               map.zoomOut(); 
             }
           }}
-          className="w-11 h-10 flex items-center justify-center text-slate-700 hover:bg-slate-100/80 transition-colors active:scale-95"
+          className="w-11 h-10 flex items-center justify-center text-slate-700 hover:bg-slate-100/80 transition-colors active:scale-95 cursor-pointer"
           title="Zoom Out"
         >
           <Minus className="w-4 h-4" />
         </button>
       </div>
 
-      {/* 1-Click Map Style Toggle: Clean Street <-> Satellite */}
+      {/* Map Style & Layer Details Selector */}
       {!hideMapStyles && (
-        <button 
-          type="button"
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            onToggleMapType();
-          }}
-          className={cn(
-            "w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all active:scale-95 group backdrop-blur-md",
-            mapType === 'satellite' 
-              ? "text-blue-600 bg-blue-50/95 border-blue-300 ring-2 ring-blue-400/30 shadow-blue-100" 
-              : "text-slate-700 bg-white/95 border-slate-200/90 hover:text-blue-600 hover:bg-white"
+        <div className="relative">
+          <button 
+            type="button"
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              setIsLayersOpen(!isLayersOpen);
+            }}
+            className={cn(
+              "w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all active:scale-95 group backdrop-blur-md cursor-pointer",
+              mapType === 'satellite' || isLayersOpen
+                ? "text-blue-600 bg-blue-50/95 border-blue-300 ring-2 ring-blue-400/30 shadow-blue-100" 
+                : "text-slate-700 bg-white/95 border-slate-200/90 hover:text-blue-600 hover:bg-white"
+            )}
+            title="Switch Map Layers (Streets, Satellite, Traffic, Terrain)"
+          >
+            <Layers className="w-5 h-5" />
+          </button>
+
+          {isLayersOpen && (
+            <div 
+              className="absolute right-14 top-0 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/90 p-2 flex flex-col gap-1 z-[3000] min-w-[210px] animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-2.5 py-1 border-b border-slate-100 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Map Details</span>
+                <span className="text-[9px] font-bold text-blue-600">Google Maps</span>
+              </div>
+              {(['standard', 'satellite', 'traffic', 'terrain'] as MapLayerType[]).map((type) => {
+                const layer = MAP_LAYERS[type];
+                if (!layer) return null;
+                const isActive = mapType === type;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      if (onSelectMapType) {
+                        onSelectMapType(type);
+                      } else {
+                        onToggleMapType();
+                      }
+                      setIsLayersOpen(false);
+                    }}
+                    className={cn(
+                      "flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all text-xs font-bold cursor-pointer",
+                      isActive 
+                        ? "bg-blue-50 text-blue-700 border border-blue-200/60 shadow-2xs" 
+                        : "text-slate-700 hover:bg-slate-100/80"
+                    )}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-base">{layer.icon}</span>
+                      <div>
+                        <p className="leading-tight font-black">{layer.name}</p>
+                        <p className="text-[9px] text-slate-400 font-medium">{layer.tag}</p>
+                      </div>
+                    </div>
+                    {isActive && <Check className="w-4 h-4 text-blue-600 shrink-0 ml-2" />}
+                  </button>
+                );
+              })}
+            </div>
           )}
-          title={mapType === 'satellite' ? "Switch to Clean Street Map" : "Switch to Satellite View"}
-        >
-          <Layers className="w-5 h-5" />
-        </button>
+        </div>
       )}
 
       {/* Expand / Maximize (Full-screen view) */}
@@ -799,11 +872,13 @@ export default function MapComponent({
     };
   }, []);
 
-  // 1-Click Toggle between Clean Street Map and Satellite View (no menu list)
+  // 1-Click Toggle or select between Google Map styles: Standard (Streets), Satellite, Traffic, Terrain
   const toggleMapType = useCallback(() => {
     setMapType((prev) => {
-      const next: MapLayerType = prev === 'satellite' ? 'standard' : 'satellite';
-      safeToast.info(next === 'satellite' ? 'Switched to Satellite View' : 'Switched to Clean Street Map', {
+      const types: MapLayerType[] = ['standard', 'satellite', 'traffic', 'terrain'];
+      const nextIdx = (types.indexOf(prev) + 1) % types.length;
+      const next = types[nextIdx];
+      safeToast.info(`Switched to ${MAP_LAYERS[next]?.name || next}`, {
         id: 'map-layer',
         duration: 1800,
         icon: null
@@ -886,8 +961,7 @@ export default function MapComponent({
     });
   }, []);
 
-  const isNightActive = isNightMode && mapType !== 'satellite';
-  const activeLayerConfig = mapType === 'satellite' ? MAP_LAYERS.satellite : MAP_LAYERS.standard;
+  const activeLayerConfig = MAP_LAYERS[mapType] || MAP_LAYERS.standard;
 
   return (
     <div 
@@ -906,7 +980,7 @@ export default function MapComponent({
       <MapContainer 
         center={[sanitizedCenter.lat, sanitizedCenter.lng]} 
         zoom={sanitizedZoom} 
-        maxZoom={19}
+        maxZoom={21}
         minZoom={3}
         scrollWheelZoom={true}
         zoomControl={false}
@@ -914,18 +988,17 @@ export default function MapComponent({
         style={{ width: '100%', height: '100%' }}
         className={cn(
           "w-full h-full",
-          mapType === 'satellite' ? "satellite-mode" : "",
-          isNightActive ? "google-night-mode" : ""
+          mapType === 'satellite' ? "satellite-mode" : ""
         )}
       >
         {/* Base Tile Layer directly mounted inside MapContainer */}
         <TileLayer
-          key={`${mapType}-${isNightActive ? 'night' : 'day'}`}
+          key={`${mapType}-${activeLayerConfig.url}`}
           attribution={activeLayerConfig.attribution}
           url={activeLayerConfig.url}
-          subdomains={activeLayerConfig.subdomains || 'abc'}
-          maxZoom={19}
-          maxNativeZoom={activeLayerConfig.maxNativeZoom || 19}
+          subdomains={activeLayerConfig.subdomains || ['0', '1', '2', '3']}
+          maxZoom={21}
+          maxNativeZoom={activeLayerConfig.maxNativeZoom || 20}
           eventHandlers={{
             tileerror: (error: any) => {
               const img = error?.tile;
@@ -933,7 +1006,7 @@ export default function MapComponent({
                 img.dataset.fallbackTried = 'true';
                 const coords = error?.coords;
                 if (coords) {
-                  img.src = `https://tile.openstreetmap.org/${coords.z}/${coords.x}/${coords.y}.png`;
+                  img.src = `https://mt2.google.com/vt/lyrs=m&hl=en&x=${coords.x}&y=${coords.y}&z=${coords.z}`;
                 }
               }
             }
@@ -948,6 +1021,7 @@ export default function MapComponent({
           <CustomControls 
             mapType={mapType}
             onToggleMapType={toggleMapType}
+            onSelectMapType={(type) => setMapType(type)}
             hideMapStyles={hideMapStyles} 
             position={controlsPosition} 
             driverCoords={driverCoords}

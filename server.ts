@@ -1093,9 +1093,13 @@ async function start() {
 
           userRow.orgSector = orgRow.sector;
           userRow.orgId = orgRow.id;
+          userRow.orgName = orgRow.name;
+          userRow.orgLogo = orgRow.logoUrl || orgRow.logo || "";
         } else {
           userRow.orgSector = "Education";
           userRow.orgId = "demo-school";
+          userRow.orgName = orgRow?.name || "Expert Transport Academy";
+          userRow.orgLogo = orgRow?.logoUrl || orgRow?.logo || "";
         }
       }
 
@@ -1209,13 +1213,33 @@ async function start() {
       const signatureB64 = Buffer.from("mock_signature").toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
       const token = `${headerB64}.${payloadB64}.${signatureB64}`;
 
+      let loginOrg: any = null;
+      if (userRow.orgId) {
+        let connOrg: any = null;
+        try {
+          connOrg = await getMySQLConnection();
+          const [orgRows] = await connOrg.query("SELECT * FROM organizations WHERE id = ?", [userRow.orgId]) as any[];
+          if (orgRows && orgRows.length > 0) {
+            loginOrg = orgRows[0];
+            userRow.orgName = loginOrg.name;
+            userRow.orgSector = loginOrg.sector;
+            userRow.orgLogo = loginOrg.logoUrl || loginOrg.logo || "";
+          }
+        } catch (e) {} finally {
+          if (connOrg) { try { await connOrg.end(); } catch (_) {} }
+        }
+      }
+
       return res.json({
         success: true,
         token,
+        org: loginOrg,
         userData: {
           ...userRow,
           uid: userRow.uid || userRow.id,
           id: userRow.uid || userRow.id,
+          orgLogo: userRow.orgLogo || "",
+          orgName: userRow.orgName || "",
           forcePasswordChange: false
         }
       });

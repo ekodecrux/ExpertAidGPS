@@ -134,7 +134,9 @@ export default function AppShell({ children }: ShellProps) {
               if (result.routes) setRoutes(result.routes);
               if (result.users) setUsers(result.users);
               if (result.trips) setTrips(result.trips);
-              if (result.organizations && userData.orgId) {
+              if (result.org) {
+                setOrg(result.org);
+              } else if (result.organizations && userData.orgId) {
                 const myOrg = result.organizations.find((o: any) => o.id === userData.orgId);
                 if (myOrg) setOrg(myOrg);
               }
@@ -490,16 +492,16 @@ export default function AppShell({ children }: ShellProps) {
           {/* Header Bar Left - Organization Info & Page Title */}
           <div className="flex items-center gap-3 md:gap-4 flex-1 overflow-hidden">
             {(() => {
-              const defaultIcon = org?.sector === 'Education'
-                ? ((org?.eduType === 'College' || (!org?.eduType && (org?.name?.toLowerCase().includes('college') || org?.name?.toLowerCase().includes('university')))) ? 'graduation-cap' : 'school')
-                : (org?.sector === 'Healthcare'
+              const defaultIcon = (org?.sector || (userData as any)?.orgSector) === 'Education'
+                ? ((((org?.eduType || (userData as any)?.eduType) === 'College') || (!(org?.eduType || (userData as any)?.eduType) && ((org?.name || (userData as any)?.orgName || '')?.toLowerCase().includes('college') || (org?.name || (userData as any)?.orgName || '')?.toLowerCase().includes('university')))) ? 'graduation-cap' : 'school')
+                : ((org?.sector || (userData as any)?.orgSector) === 'Healthcare'
                   ? 'hospital'
-                  : (org?.sector === 'Government'
+                  : ((org?.sector || (userData as any)?.orgSector) === 'Government'
                     ? 'museum'
                     : 'commercial'));
 
-              const displayLogo = org?.logo || org?.logoUrl || userData?.avatarUrl || (userData as any)?.photoURL || getLocalIcon(defaultIcon);
-              const displayName = org?.name || userData?.name || (userData?.role === 'super_admin' ? 'Master Control Hub' : 'Fleet Management');
+              const displayLogo = org?.logo || org?.logoUrl || (userData as any)?.orgLogo || userData?.avatarUrl || (userData as any)?.photoURL || getLocalIcon(defaultIcon);
+              const displayName = org?.name || (userData as any)?.orgName || userData?.name || (userData?.role === 'super_admin' ? 'Master Control Hub' : 'Fleet Management');
               const displayRole = userData?.role?.replace('_', ' ') || 'Admin';
               const currentCrumb = menuItems.find(item => item.path === location.pathname)?.label || (userData?.role === 'org_admin' ? 'Management' : 'Dashboard');
 

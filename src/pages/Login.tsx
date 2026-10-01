@@ -241,12 +241,12 @@ export default function Login() {
         <div className="p-6 pb-2 text-center">
             <div className="mx-auto mb-3 transition-all duration-300">
               <img 
-                src={expertAidLogoUrl} 
-                alt="ExpertAid" 
+                src={currentLogoUrl || expertAidLogoUrl} 
+                alt="Logo" 
                 className="h-20 mx-auto object-contain" 
                 referrerPolicy="no-referrer" 
                 onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
+                  (e.target as HTMLImageElement).src = expertAidLogoUrl;
                 }}
               />
             </div>
