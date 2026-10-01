@@ -4,10 +4,11 @@ import { LayoutDashboard, Users, Route, Bus, LogOut, Settings, Bell, Map as MapI
 import ExpertGpsLogo from './ExpertGpsLogo';
 import { cn, getLocalAvatar, getUserAvatar, getLocalIcon } from '../lib/utils';
 import { Link, useLocation } from 'react-router-dom';
-import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, setDoc } from 'firebase/firestore';
 import { sendPasswordResetEmail, updateProfile } from 'firebase/auth';
 import { db, auth as firebaseAuth } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
+import { saveMySQLRecord } from '../lib/mysql';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'react-hot-toast';
 
@@ -354,6 +355,18 @@ export default function AppShell({ children }: ShellProps) {
     }
   }, []);
 
+  const isCollege = ((org?.eduType || (userData as any)?.eduType) === 'College') || (!(org?.eduType || (userData as any)?.eduType) && ((org?.name || (userData as any)?.orgName || '')?.toLowerCase().includes('college') || (org?.name || (userData as any)?.orgName || '')?.toLowerCase().includes('university')));
+  const defaultIcon = (org?.sector || (userData as any)?.orgSector) === 'Education'
+    ? (isCollege ? 'graduation-cap' : 'school')
+    : ((org?.sector || (userData as any)?.orgSector) === 'Healthcare'
+      ? 'hospital'
+      : ((org?.sector || (userData as any)?.orgSector) === 'Government'
+        ? 'museum'
+        : 'commercial'));
+
+  const displayLogo = org?.logo || org?.logoUrl || (userData as any)?.orgLogo || userData?.avatarUrl || (userData as any)?.photoURL || getLocalIcon(defaultIcon);
+  const displayName = org?.name || (userData as any)?.orgName || userData?.name || (userData?.role === 'super_admin' ? 'Master Control Hub' : 'Fleet Management');
+
   return (
     <div className="h-screen bg-[#F8FAFC] flex flex-col md:flex-row overflow-hidden relative">
       {/* Mobile Nav Header */}
@@ -492,16 +505,6 @@ export default function AppShell({ children }: ShellProps) {
           {/* Header Bar Left - Organization Info & Page Title */}
           <div className="flex items-center gap-3 md:gap-4 flex-1 overflow-hidden">
             {(() => {
-              const defaultIcon = (org?.sector || (userData as any)?.orgSector) === 'Education'
-                ? ((((org?.eduType || (userData as any)?.eduType) === 'College') || (!(org?.eduType || (userData as any)?.eduType) && ((org?.name || (userData as any)?.orgName || '')?.toLowerCase().includes('college') || (org?.name || (userData as any)?.orgName || '')?.toLowerCase().includes('university')))) ? 'graduation-cap' : 'school')
-                : ((org?.sector || (userData as any)?.orgSector) === 'Healthcare'
-                  ? 'hospital'
-                  : ((org?.sector || (userData as any)?.orgSector) === 'Government'
-                    ? 'museum'
-                    : 'commercial'));
-
-              const displayLogo = org?.logo || org?.logoUrl || (userData as any)?.orgLogo || userData?.avatarUrl || (userData as any)?.photoURL || getLocalIcon(defaultIcon);
-              const displayName = org?.name || (userData as any)?.orgName || userData?.name || (userData?.role === 'super_admin' ? 'Master Control Hub' : 'Fleet Management');
               const displayRole = userData?.role?.replace('_', ' ') || 'Admin';
               const currentCrumb = menuItems.find(item => item.path === location.pathname)?.label || (userData?.role === 'org_admin' ? 'Management' : 'Dashboard');
 
@@ -730,14 +733,18 @@ export default function AppShell({ children }: ShellProps) {
                 setNewName(userData?.name || '');
               }}
               title="Admin Profile & Settings"
-              className="h-11 md:h-12 min-w-11 md:min-w-12 px-2 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-blue-400 hover:ring-4 hover:ring-blue-500/10 transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer group"
+              className="h-11 md:h-12 min-w-11 md:min-w-12 px-2.5 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-blue-400 hover:ring-4 hover:ring-blue-500/10 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer group"
             >
-              <div className="h-8 md:h-9 w-auto max-w-[72px] flex items-center justify-center overflow-hidden shrink-0">
+              <div className="h-8 md:h-9 w-auto min-w-[28px] max-w-[72px] flex items-center justify-center overflow-hidden shrink-0">
                 <img 
-                  src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
-                  alt="Avatar" 
-                  className="h-full w-auto max-w-full object-contain" 
+                  key={`header-right-logo-${org?.id || ''}-${org?.logoUrl || org?.logo || ''}`}
+                  src={displayLogo} 
+                  alt={displayName} 
+                  className="h-full w-auto max-h-8 md:max-h-9 max-w-full object-contain" 
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid);
+                  }}
                 />
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors hidden sm:block" />
@@ -771,11 +778,15 @@ export default function AppShell({ children }: ShellProps) {
                   </button>
                   <div className="flex items-center gap-4">
                     <div className="relative group p-0.5 bg-white rounded-2xl border border-white/25 shadow-xl">
-                      <div className="w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center bg-white">
+                      <div className="w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center bg-white p-1">
                         <img 
-                          src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
-                          alt="Avatar" 
+                          key={`modal-profile-logo-${org?.id || ''}-${org?.logoUrl || org?.logo || ''}`}
+                          src={displayLogo} 
+                          alt="Logo" 
                           className="w-full h-full object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid);
+                          }}
                         />
                       </div>
                       <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-all rounded-[14px] cursor-pointer">
@@ -799,16 +810,31 @@ export default function AppShell({ children }: ShellProps) {
                                 const base64 = event.target?.result as string;
                                 setIsSaving(true);
                                 try {
-                                  // Update Firestore
+                                  // Update Firestore user
                                   await updateDoc(doc(db, 'users', userData!.uid), {
                                     avatarUrl: base64,
                                     updatedAt: serverTimestamp()
                                   });
 
-                                  toast.success('Profile photo updated successfully');
+                                  // If client admin, also update organization logo dynamically
+                                  if (userData?.orgId) {
+                                    try {
+                                      await saveMySQLRecord('update', 'organizations', userData.orgId, {
+                                        logo: base64,
+                                        logoUrl: base64
+                                      });
+                                      await setDoc(doc(db, 'organizations', userData.orgId), {
+                                        logo: base64,
+                                        logoUrl: base64
+                                      }, { merge: true });
+                                      setOrg((prev: any) => prev ? { ...prev, logo: base64, logoUrl: base64 } : prev);
+                                    } catch (_) {}
+                                  }
+
+                                  toast.success('Logo updated successfully');
                                 } catch (e) {
                                   console.error("Photo update error:", e);
-                                  toast.error('Failed to update photo');
+                                  toast.error('Failed to update logo');
                                 } finally {
                                   setIsSaving(false);
                                 }
