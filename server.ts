@@ -5070,7 +5070,7 @@ async function start() {
       }
     });
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = path.join(process.cwd(), "dist/public");
     app.use(express.static(distPath));
     app.get("*all", (req, res) => {
       if (req.originalUrl.startsWith('/api')) {

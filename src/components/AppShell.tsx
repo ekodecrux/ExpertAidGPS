@@ -409,14 +409,17 @@ export default function AppShell({ children }: ShellProps) {
           "flex items-center transition-all h-24 shrink-0 relative",
           isSidebarOpen ? "p-4 md:p-6 justify-between" : "p-2 justify-center"
         )}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/90 shadow-xs flex items-center justify-center shrink-0 p-1 overflow-hidden transition-transform hover:scale-105">
-              <ExpertGpsLogo className="w-full h-full" />
-            </div>
-            {isSidebarOpen && (
-              <span className="text-slate-900 font-black text-xl tracking-tighter leading-none italic uppercase truncate">
-                Expert GPS
-              </span>
+          <div className={cn("flex items-center", isSidebarOpen ? "w-full" : "justify-center")}>
+            {isSidebarOpen ? (
+              <img
+                src="/instantexpert-logo.png"
+                alt="Instant Experts"
+                className="h-12 w-auto max-w-[180px] object-contain object-left"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/90 shadow-xs flex items-center justify-center shrink-0 p-1 overflow-hidden transition-transform hover:scale-105">
+                <ExpertGpsLogo className="w-full h-full" />
+              </div>
             )}
           </div>
           

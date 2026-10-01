@@ -11,7 +11,7 @@ export default defineConfig(({mode}) => {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },
     build: {
-      outDir: 'dist',
+      outDir: 'dist/public',
       emptyOutDir: true,
     },
     resolve: {
