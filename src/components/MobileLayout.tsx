@@ -121,9 +121,9 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50 overflow-hidden font-sans">
       {/* Dynamic Header */}
-      <header className="bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3 flex items-center justify-between z-[6000] shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-white border border-slate-200/90 shadow-xs overflow-hidden flex items-center justify-center p-1.5 cursor-pointer active:scale-95 transition-transform" onClick={() => onTabChange('profile')}>
+      <header className="bg-white/95 backdrop-blur-md border-b border-slate-100 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+8px)] pb-2 flex items-center justify-between gap-2 z-[6000] shadow-sm">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
+          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/90 shadow-xs overflow-hidden flex items-center justify-center p-1 shrink-0 cursor-pointer active:scale-95 transition-transform" onClick={() => onTabChange('profile')}>
             {(() => {
               const isCollege = org?.eduType === 'College' || (!org?.eduType && (org?.name?.toLowerCase().includes('college') || org?.name?.toLowerCase().includes('university')));
               const defaultIcon = org?.sector === 'Education'
@@ -148,42 +148,47 @@ export default function MobileLayout({ children, activeTab, onTabChange, tabs, h
               );
             })()}
           </div>
-          <div>
-            <h1 className="text-xs font-black text-slate-900 uppercase tracking-tighter italic leading-none truncate max-w-[150px]">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <h1 className="text-xs font-black text-slate-900 uppercase tracking-tight italic leading-none truncate">
               {org?.name || userData?.name || 'Expert GPS'}
             </h1>
-            <div className="flex items-center gap-2 mt-1.5 px-0.5 group">
-              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 shadow-2xs overflow-hidden flex-shrink-0 flex items-center justify-center p-0.5">
+            <div className="flex items-center gap-1.5 mt-1 px-0.5 group">
+              <div className="w-5 h-5 rounded-md bg-white border border-slate-200 shadow-2xs overflow-hidden flex-shrink-0 flex items-center justify-center p-0.5">
                 <img 
                   src={getUserAvatar(userData?.avatarUrl, (userData as any)?.photoURL, userData?.name, userData?.uid)} 
                   alt="driver" 
                   className="w-full h-full object-contain"
                 />
               </div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate max-w-[120px] transition-colors group-hover:text-blue-600">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">
                 {userData?.name || 'Commander'}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button 
-            className="p-2.5 rounded-xl bg-slate-50 text-slate-400 relative hover:text-blue-600 transition-colors"
+            className="p-2 sm:p-2.5 rounded-xl bg-slate-50 text-slate-400 relative hover:text-blue-600 transition-colors shrink-0"
             onClick={() => setShowNotifications(true)}
+            title="Notifications"
           >
-            <Bell size={18} />
+            <Bell size={17} />
             {hasUnread && (
-              <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-blue-600 rounded-full border-2 border-white animate-bounce"></span>
+              <span className="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full border-2 border-white animate-bounce"></span>
             )}
           </button>
           
-          {headerRight ? headerRight : (
+          {headerRight ? (
+            <div className="shrink-0 flex items-center">
+              {headerRight}
+            </div>
+          ) : (
             <button 
               onClick={() => setIsMenuOpen(true)}
-              className="p-2.5 rounded-xl bg-slate-900 text-white shadow-lg shadow-slate-900/20 active:scale-95 transition-all"
+              className="p-2 sm:p-2.5 rounded-xl bg-slate-900 text-white shadow-lg shadow-slate-900/20 active:scale-95 transition-all shrink-0"
             >
-              <Menu size={18} />
+              <Menu size={17} />
             </button>
           )}
         </div>

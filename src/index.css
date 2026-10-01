@@ -43,6 +43,7 @@
     height: 100% !important;
     background: #f1f5f9 !important;
     font-family: inherit !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
   }
 
   /* High quality tile rendering */

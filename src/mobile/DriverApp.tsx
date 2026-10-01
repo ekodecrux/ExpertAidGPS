@@ -377,7 +377,7 @@ export default function DriverApp() {
         }
       }}
       className={cn(
-        "relative py-2 px-4 rounded-2xl text-white shadow-xl transition-all duration-300 flex items-center justify-center gap-2 group overflow-hidden border border-white/20",
+        "relative py-2 px-3 sm:px-4 rounded-xl text-white shadow-lg transition-all duration-300 flex items-center justify-center gap-1.5 group overflow-hidden border border-white/20 shrink-0 whitespace-nowrap cursor-pointer",
         activeTrip 
           ? "bg-rose-600 shadow-rose-500/30" 
           : "bg-emerald-500 shadow-emerald-500/30"
@@ -390,10 +390,10 @@ export default function DriverApp() {
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1.5 whitespace-nowrap"
           >
-            <Power size={18} className="drop-shadow-sm" />
-            <span className="text-[10px] font-black uppercase tracking-widest italic">End Trip</span>
+            <Power size={15} className="drop-shadow-sm shrink-0" />
+            <span className="text-[10px] font-black uppercase tracking-wider italic whitespace-nowrap">End Trip</span>
           </motion.div>
         ) : (
           <motion.div
@@ -401,17 +401,17 @@ export default function DriverApp() {
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1.5 whitespace-nowrap"
           >
-            <Navigation size={18} className="drop-shadow-sm" />
-            <span className="text-[10px] font-black uppercase tracking-widest italic">Start Trip</span>
+            <Navigation size={15} className="drop-shadow-sm shrink-0" />
+            <span className="text-[10px] font-black uppercase tracking-wider italic whitespace-nowrap">Start Trip</span>
           </motion.div>
         )}
       </AnimatePresence>
       
       {/* Pulse effect for active trip */}
       {activeTrip && (
-        <span className="absolute inset-0 rounded-2xl bg-white/20 animate-pulse pointer-events-none"></span>
+        <span className="absolute inset-0 rounded-xl bg-white/20 animate-pulse pointer-events-none"></span>
       )}
     </motion.button>
   );

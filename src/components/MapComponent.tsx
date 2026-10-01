@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { Locate, Maximize2, Minimize2, Layers, Plus, Minus, Target, Loader2, Check, X } from 'lucide-react';
@@ -929,18 +930,18 @@ export default function MapComponent({
 
   const activeLayerConfig = MAP_LAYERS[mapType] || MAP_LAYERS.standard;
 
-  return (
+  const mapElement = (
     <div 
       className={cn(
         "rounded-2xl overflow-hidden shadow-lg border border-slate-200 relative group",
         isFullscreen 
-          ? "fixed inset-0 z-[99999] w-screen h-screen rounded-none border-none shadow-2xl bg-slate-950 m-0 p-0" 
+          ? "fixed inset-0 z-[99999999] w-screen h-screen rounded-none border-none shadow-2xl bg-slate-950 m-0 p-0" 
           : "w-full z-0",
         className
       )} 
       style={{ 
         height: isFullscreen ? '100vh' : height,
-        ...(isFullscreen ? { top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', position: 'fixed' } : {})
+        ...(isFullscreen ? { top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', position: 'fixed', zIndex: 99999999 } : {})
       }}
     >
       <MapContainer 
@@ -1012,6 +1013,12 @@ export default function MapComponent({
       </MapContainer>
     </div>
   );
+
+  if (isFullscreen && typeof document !== 'undefined') {
+    return createPortal(mapElement, document.body);
+  }
+
+  return mapElement;
 }
 
 export { Marker, Popup, Polyline };
