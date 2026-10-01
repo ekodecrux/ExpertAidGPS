@@ -115,7 +115,7 @@ export function getUserAvatar(avatarUrl?: string, photoURL?: string, name?: stri
 
 export function getLocalIcon(type: string): string {
   if (!type) return '';
-  if (type.startsWith('data:') || type.startsWith('http')) {
+  if (type.startsWith('data:') || type.startsWith('http') || type.startsWith('/') || type.startsWith('./')) {
     return type;
   }
   const norm = type.toLowerCase();

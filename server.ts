@@ -1093,9 +1093,13 @@ async function start() {
 
           userRow.orgSector = orgRow.sector;
           userRow.orgId = orgRow.id;
+          userRow.orgName = orgRow.name;
+          userRow.orgLogo = orgRow.logoUrl || orgRow.logo || "";
         } else {
           userRow.orgSector = "Education";
           userRow.orgId = "demo-school";
+          userRow.orgName = orgRow?.name || "Expert Transport Academy";
+          userRow.orgLogo = orgRow?.logoUrl || orgRow?.logo || "";
         }
       }
 
@@ -1209,13 +1213,33 @@ async function start() {
       const signatureB64 = Buffer.from("mock_signature").toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
       const token = `${headerB64}.${payloadB64}.${signatureB64}`;
 
+      let loginOrg: any = null;
+      if (userRow.orgId) {
+        let connOrg: any = null;
+        try {
+          connOrg = await getMySQLConnection();
+          const [orgRows] = await connOrg.query("SELECT * FROM organizations WHERE id = ?", [userRow.orgId]) as any[];
+          if (orgRows && orgRows.length > 0) {
+            loginOrg = orgRows[0];
+            userRow.orgName = loginOrg.name;
+            userRow.orgSector = loginOrg.sector;
+            userRow.orgLogo = loginOrg.logoUrl || loginOrg.logo || "";
+          }
+        } catch (e) {} finally {
+          if (connOrg) { try { await connOrg.end(); } catch (_) {} }
+        }
+      }
+
       return res.json({
         success: true,
         token,
+        org: loginOrg,
         userData: {
           ...userRow,
           uid: userRow.uid || userRow.id,
           id: userRow.uid || userRow.id,
+          orgLogo: userRow.orgLogo || "",
+          orgName: userRow.orgName || "",
           forcePasswordChange: false
         }
       });
@@ -2286,8 +2310,11 @@ async function start() {
           const gstPercent = 18;
           const gstAmount = Number((price * (gstPercent / 100)).toFixed(2));
           const totalAmount = Number((price + gstAmount).toFixed(2));
+          const l = o.logoUrl || o.logo || "";
           return {
             ...o,
+            logo: l,
+            logoUrl: l,
             totalPaidAmount,
             price,
             subscriptionPlan: o.plan || "basic",
@@ -2391,6 +2418,8 @@ async function start() {
 
         const mappedOrg = org ? {
           ...org,
+          logo: org.logoUrl || org.logo || "",
+          logoUrl: org.logoUrl || org.logo || "",
           subscriptionPlan: org.plan,
           location: (org.latitude !== null && org.longitude !== null && org.latitude !== undefined && org.longitude !== undefined)
             ? { lat: Number(org.latitude), lng: Number(org.longitude) }
@@ -2587,7 +2616,7 @@ async function start() {
           return res.status(403).json({ error: "Forbidden: Org Admin can only update their own organization settings" });
         }
         // Restrict fields to safe settings (avoid modifying plan/status directly inside records update)
-        const safeKeys = ["latitude", "longitude", "eduType", "name", "address", "mobile", "email", "logoUrl"];
+        const safeKeys = ["latitude", "longitude", "eduType", "name", "address", "mobile", "email", "logoUrl", "logo"];
         const keysToUpdate = Object.keys(data || {});
         const invalidKeys = keysToUpdate.filter(k => !safeKeys.includes(k));
         if (invalidKeys.length > 0) {
@@ -2710,6 +2739,9 @@ async function start() {
         const orgLat = mergedData.latitude !== undefined ? mergedData.latitude : (mergedData.location?.lat !== undefined ? mergedData.location.lat : null);
         const orgLng = mergedData.longitude !== undefined ? mergedData.longitude : (mergedData.location?.lng !== undefined ? mergedData.location.lng : null);
         const orgEduType = mergedData.eduType || "";
+        const orgLogo = mergedData.logoUrl || mergedData.logo || "";
+        mergedData.logoUrl = orgLogo;
+        mergedData.logo = orgLogo;
 
         if (orgLat !== null && orgLng !== null) {
           mergedData.location = { lat: Number(orgLat), lng: Number(orgLng) };
@@ -2722,10 +2754,36 @@ async function start() {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
            ON DUPLICATE KEY UPDATE name=?, sector=?, mobile=?, email=?, logoUrl=?, address=?, plan=?, status=?, totalPaidAmount=?, price=?, onboardDate=?, expiryDate=?, latitude=?, longitude=?, eduType=?`,
           [
-            id, mergedData.name || "", mergedData.sector || "", mergedData.mobile || "", mergedData.email || "", mergedData.logoUrl || "", mergedData.address || "", pPlan, pStatus, pTotal, pPrice, onboard, expiry, orgLat, orgLng, orgEduType,
-            mergedData.name || "", mergedData.sector || "", mergedData.mobile || "", mergedData.email || "", mergedData.logoUrl || "", mergedData.address || "", pPlan, pStatus, pTotal, pPrice, onboard, expiry, orgLat, orgLng, orgEduType
+            id, mergedData.name || "", mergedData.sector || "", mergedData.mobile || "", mergedData.email || "", orgLogo, mergedData.address || "", pPlan, pStatus, pTotal, pPrice, onboard, expiry, orgLat, orgLng, orgEduType,
+            mergedData.name || "", mergedData.sector || "", mergedData.mobile || "", mergedData.email || "", orgLogo, mergedData.address || "", pPlan, pStatus, pTotal, pPrice, onboard, expiry, orgLat, orgLng, orgEduType
           ]
         );
+
+        if (firestoreDb) {
+          try {
+            await firestoreDb.collection("organizations").doc(id).set({
+              name: mergedData.name || "",
+              sector: mergedData.sector || "",
+              mobile: mergedData.mobile || "",
+              email: mergedData.email || "",
+              logo: orgLogo,
+              logoUrl: orgLogo,
+              address: mergedData.address || "",
+              plan: pPlan,
+              subscriptionPlan: pPlan,
+              status: pStatus,
+              totalPaidAmount: pTotal,
+              price: pPrice,
+              onboardDate: onboard,
+              expiryDate: expiry,
+              latitude: orgLat,
+              longitude: orgLng,
+              eduType: orgEduType
+            }, { merge: true });
+          } catch (fErr: any) {
+            console.warn("[Firestore sync organizations error]:", fErr.message);
+          }
+        }
       } else if (table === "users") {
         const phoneNum = mergedData.phone || mergedData.mobile || "";
         const uDate = mergedData.updatedAt || new Date().toISOString();
@@ -5012,10 +5070,7 @@ async function start() {
       }
     });
   } else {
-    const distRoot = path.join(process.cwd(), "dist");
-    const distPath = fs.existsSync(path.join(distRoot, "public"))
-      ? path.join(distRoot, "public")
-      : distRoot;
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*all", (req, res) => {
       if (req.originalUrl.startsWith('/api')) {

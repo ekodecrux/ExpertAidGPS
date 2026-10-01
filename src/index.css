@@ -41,22 +41,19 @@
   .leaflet-container {
     width: 100% !important;
     height: 100% !important;
-    background: #fdfaf6 !important;
+    background: #f1f5f9 !important;
     font-family: inherit !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
   }
 
-  /* Night Mode container & dark navigation filter */
-  .leaflet-container.google-night-mode {
-    background: #111827 !important;
-  }
-
-  .leaflet-container.google-night-mode .leaflet-tile-pane {
-    filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(92%) saturate(0.85);
+  /* High quality tile rendering */
+  .leaflet-tile-pane {
+    filter: contrast(1.02) saturate(1.02);
   }
 
   /* Preserve 100% natural aerial photography in satellite view */
   .leaflet-container.satellite-mode .leaflet-tile-pane {
-    filter: saturate(1.12) contrast(1.06) brightness(1.0) !important;
+    filter: saturate(1.08) contrast(1.04) brightness(1.0) !important;
   }
 
   /* Modern Glassmorphic Leaflet Popups */
@@ -101,11 +98,18 @@
     }
   }
 
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  /* Invisible scrollbars that allow smooth scrolling but do not display */
+  .scrollbar-hide::-webkit-scrollbar,
+  .custom-scrollbar::-webkit-scrollbar,
+  .no-scrollbar::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  .scrollbar-hide,
+  .custom-scrollbar,
+  .no-scrollbar {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
   }
 }
