@@ -412,14 +412,16 @@ export default function AppShell({ children }: ShellProps) {
           <div className={cn("flex items-center", isSidebarOpen ? "w-full" : "justify-center")}>
             {isSidebarOpen ? (
               <img
-                src="/instantexpert-logo.png"
+                src="/instantexpert-sidebar-logo.png"
                 alt="Instant Experts"
                 className="h-12 w-auto max-w-[180px] object-contain object-left"
               />
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/90 shadow-xs flex items-center justify-center shrink-0 p-1 overflow-hidden transition-transform hover:scale-105">
-                <ExpertGpsLogo className="w-full h-full" />
-              </div>
+              <img
+                src="/assets/app-icon-192.png"
+                alt="Expert GPS"
+                className="w-11 h-11 object-contain shrink-0 transition-transform hover:scale-105"
+              />
             )}
           </div>
           
