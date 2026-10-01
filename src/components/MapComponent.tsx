@@ -331,47 +331,13 @@ function MobileScrollHelper({ isFullscreen }: { isFullscreen: boolean }) {
   const map = useMap();
 
   useEffect(() => {
-    if (isFullscreen) {
-      map.dragging.enable();
-      return;
+    map.dragging.enable();
+    if (map.touchZoom) {
+      map.touchZoom.enable();
     }
-
-    const container = map.getContainer();
-    if (!container) return;
-
-    const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-    if (!isTouchDevice) {
-      map.dragging.enable();
-      return;
+    if (map.doubleClickZoom) {
+      map.doubleClickZoom.enable();
     }
-
-    // Default when embedded on mobile: disable 1-finger map drag so the page scrolls freely with the user's hand
-    map.dragging.disable();
-    container.style.touchAction = 'pan-y';
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length >= 2) {
-        map.dragging.enable();
-      } else {
-        map.dragging.disable();
-      }
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) {
-        map.dragging.disable();
-      }
-    };
-
-    container.addEventListener('touchstart', onTouchStart, { passive: true });
-    container.addEventListener('touchend', onTouchEnd, { passive: true });
-    container.addEventListener('touchcancel', onTouchEnd, { passive: true });
-
-    return () => {
-      container.removeEventListener('touchstart', onTouchStart);
-      container.removeEventListener('touchend', onTouchEnd);
-      container.removeEventListener('touchcancel', onTouchEnd);
-    };
   }, [map, isFullscreen]);
 
   return null;
