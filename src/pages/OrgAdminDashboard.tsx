@@ -233,7 +233,9 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
                 };
               });
 
-              // Overwrite with any real-time tracking data already present in previous state
+              // Preserve the most recent valid GPS location when the relational refresh
+              // does not include coordinates yet. Firestore will supply high-frequency
+              // updates separately without allowing null snapshots to erase a marker.
               const merged = [...mysqlVehicles];
               prevVehicles.forEach(prevV => {
                 const idx = merged.findIndex(v => String(v.id) === String(prevV.id));
@@ -241,7 +243,7 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
                   if (prevV.location) {
                     merged[idx] = {
                       ...merged[idx],
-                      location: prevV.location,
+                      location: prevV.location || merged[idx].location,
                       status: prevV.status || merged[idx].status,
                       latitude: prevV.latitude !== undefined ? prevV.latitude : merged[idx].latitude,
                       longitude: prevV.longitude !== undefined ? prevV.longitude : merged[idx].longitude
@@ -281,7 +283,12 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
               mysqlLiveTrips.forEach(t => map.set(String(t.id), t));
               prevTrips.forEach(pt => {
                 if (map.has(String(pt.id))) {
-                  map.set(String(pt.id), { ...map.get(String(pt.id)), ...pt });
+                  const nextTrip = map.get(String(pt.id));
+                  map.set(String(pt.id), {
+                    ...pt,
+                    ...nextTrip,
+                    location: nextTrip.location || pt.location
+                  });
                 } else if (pt.status === 'live' || pt.status === 'ongoing') {
                   map.set(String(pt.id), pt);
                 }
@@ -303,8 +310,8 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
 
     fetchMySQLData();
 
-    // Setup polling interval for Bluehost database (every 10 seconds for real-time live map updates)
-    const interval = setInterval(fetchMySQLData, 10000);
+    // Keep the fallback relational sync responsive when Firestore is delayed.
+    const interval = setInterval(fetchMySQLData, 5000);
     setLoading(false);
 
     return () => {
@@ -349,8 +356,13 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
         fsVehicles.forEach(fsV => {
           const idx = merged.findIndex(v => String(v.id) === String(fsV.id));
           if (idx !== -1) {
-            // Keep existing MySQL parameters but overwrite location, status & high-frequency variables
-            merged[idx] = { ...merged[idx], ...fsV };
+            // Keep existing MySQL parameters, but never let a null/invalid Firestore
+            // snapshot erase a valid GPS marker from the relational refresh.
+            merged[idx] = {
+              ...merged[idx],
+              ...fsV,
+              location: fsV.location || merged[idx].location
+            };
           } else {
             merged.push(fsV);
           }
@@ -405,7 +417,11 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
         prevTrips.forEach(t => map.set(String(t.id), t));
         fsTrips.forEach(t => {
           const existing = map.get(String(t.id));
-          map.set(String(t.id), existing ? { ...existing, ...t } : t);
+          map.set(String(t.id), existing ? {
+            ...existing,
+            ...t,
+            location: t.location || existing.location
+          } : t);
         });
         return Array.from(map.values()).filter(t => t.status === 'live' || t.status === 'ongoing');
       });

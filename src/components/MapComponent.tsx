@@ -5,7 +5,7 @@ import L from 'leaflet';
 import { Locate, Maximize2, Minimize2, Layers, Plus, Minus, Target, Loader2, Check, X, Map } from 'lucide-react';
 import { Geolocation } from '@capacitor/geolocation';
 import { Capacitor } from '@capacitor/core';
-import { cn, getLocalIcon } from '../lib/utils';
+import { cn, getLocalIcon, isValidCoordinate } from '../lib/utils';
 import { getLastKnownLocation, saveLastKnownLocation } from '../lib/locationService';
 import toast from 'react-hot-toast';
 
@@ -132,8 +132,8 @@ function UserLocationMarker({ highAccuracy = true }: { highAccuracy?: boolean })
           }
           const pos = await Geolocation.getCurrentPosition({
             enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
+            timeout: 5000,
+            maximumAge: 15000
           });
           if (pos?.coords && isMounted) {
             const { latitude: lat, longitude: lng } = pos.coords;
@@ -522,6 +522,16 @@ function CustomControls({
   const onLocate = async () => {
     setIsLocating(true);
 
+    // Use the last known fix immediately while a fresh GPS request runs. This
+    // keeps the control responsive when the device needs time for a cold fix.
+    const cached = getLastKnownLocation();
+    if (cached && isValidCoordinate(cached.lat, cached.lng)) {
+      map.flyTo([cached.lat, cached.lng], Math.max(map.getZoom(), 16), {
+        animate: true,
+        duration: 0.35
+      });
+    }
+
     // 1. Mobile Native App (Capacitor) High-Accuracy GPS
     if (Capacitor.isNativePlatform()) {
       try {
@@ -538,7 +548,7 @@ function CustomControls({
           const { latitude: lat, longitude: lng } = pos.coords;
           if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
             saveLastKnownLocation(lat, lng);
-            map.flyTo([lat, lng], 18, { animate: true, duration: 0.8 });
+            map.flyTo([lat, lng], 18, { animate: true, duration: 0.55 });
             safeToast.success('Centered on current GPS location', { id: 'gps-locate' });
             setIsLocating(false);
             return;
@@ -557,7 +567,7 @@ function CustomControls({
           const lng = pos.coords.longitude;
           if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
             saveLastKnownLocation(lat, lng);
-            map.flyTo([lat, lng], 18, { animate: true, duration: 0.8 });
+            map.flyTo([lat, lng], 18, { animate: true, duration: 0.55 });
             safeToast.success('Centered on current location', { id: 'gps-locate' });
           }
           setIsLocating(false);
@@ -566,14 +576,14 @@ function CustomControls({
           console.warn("High-accuracy locate fallback:", err);
           const cached = getLastKnownLocation();
           if (cached) {
-            map.flyTo([cached.lat, cached.lng], 18, { animate: true, duration: 0.8 });
+            map.flyTo([cached.lat, cached.lng], 18, { animate: true, duration: 0.35 });
             safeToast.success('Centered on last known location', { id: 'gps-locate' });
           } else {
             safeToast.error('Please allow location permissions to locate your device', { id: 'gps-locate' });
           }
           setIsLocating(false);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 15000 }
       );
     } else {
       setIsLocating(false);
