@@ -4,3 +4,6 @@ allowBuilds:
   core-js: true
   esbuild: true
   protobufjs: true
+minimumReleaseAgeExclude:
+  - '@capacitor/filesystem@8.1.4'
+  - '@capacitor/share@8.0.3'

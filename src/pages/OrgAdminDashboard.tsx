@@ -4595,8 +4595,16 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
           <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Real-time status of all running buses</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="px-3 py-1.5 md:px-4 md:py-2 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 flex items-center gap-2 shrink-0">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+          <div className={cn(
+            "px-3 py-1.5 md:px-4 md:py-2 rounded-full border flex items-center gap-2 shrink-0",
+            activeTrips.length > 0
+              ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+              : "bg-slate-100 text-slate-500 border-slate-200"
+          )}>
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              activeTrips.length > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+            )} />
             <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">{activeTrips.length} Fleet Active</span>
           </div>
           <button 
@@ -5114,7 +5122,23 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
               if (firstLiveBus && isValidCoordinate(firstLiveBus.lat, firstLiveBus.lng)) {
                 return { lat: parseFloat(firstLiveBus.lat), lng: parseFloat(firstLiveBus.lng) };
               }
-              return org?.location;
+              if (org?.location && isValidCoordinate(org.location.lat, org.location.lng)) {
+                return org.location;
+              }
+
+              // Keep the map anchored before the organization or a live GPS fix loads.
+              // This is important on mobile when no active fleet can provide a center.
+              const firstKnownLocation = allVehicles
+                .map((vehicle: any) => vehicle?.location)
+                .find((location: any) => location && isValidCoordinate(location.lat, location.lng));
+              if (firstKnownLocation) {
+                return {
+                  lat: Number(firstKnownLocation.lat),
+                  lng: Number(firstKnownLocation.lng)
+                };
+              }
+
+              return { lat: 17.4504, lng: 78.3808 };
             })())}
           >
             {/* Org Marker */}
@@ -5323,6 +5347,24 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
               );
             })}
           </MapComponent>
+          {activeTrips.length === 0 && (
+            <div className="absolute inset-0 z-[900] flex items-center justify-center pointer-events-none p-5">
+              <div className="max-w-xs rounded-3xl border border-white/80 bg-white/92 px-6 py-5 text-center shadow-2xl backdrop-blur-md">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                  <Bus size={24} />
+                </div>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-800">No active fleets</p>
+                <p className="mt-2 text-[10px] font-bold leading-relaxed text-slate-500">
+                  The live map is ready. Fleet locations will appear here when a driver starts a trip.
+                </p>
+                {allVehicles.length > 0 && (
+                  <p className="mt-3 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    {allVehicles.length} registered {allVehicles.length === 1 ? 'vehicle' : 'vehicles'} on standby
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Quick HUD for Selected Bus */}
           <AnimatePresence>
