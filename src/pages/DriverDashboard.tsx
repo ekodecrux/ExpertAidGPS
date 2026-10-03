@@ -17,7 +17,9 @@ import {
   Target,
   Shield,
   ChevronRight,
+  Route,
 } from "lucide-react";
+import { exportCsvFile } from "../lib/fileExport";
 import MapComponent, {
   Marker,
   vehicleIcon,
@@ -93,6 +95,15 @@ export default function DriverDashboard({
   const [endDate, setEndDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+
+  // Global trigger for opening history from mobile app tabs or headers
+  useEffect(() => {
+    const handleOpenHistory = () => {
+      fetchHistory();
+    };
+    window.addEventListener("open-driver-history", handleOpenHistory);
+    return () => window.removeEventListener("open-driver-history", handleOpenHistory);
+  }, [userData?.orgId, userData?.id, startDate, endDate]);
   const [roadCoords, setRoadCoords] = useState<[number, number][]>([]);
 
   const sortedStopsList = React.useMemo(() => {
@@ -1115,17 +1126,41 @@ export default function DriverDashboard({
       if (resObj.ok) {
         const res = await resObj.json();
         if (res.success && res.trips) {
-          const completedTrips = res.trips.filter(
-            (t: any) =>
-              t.routeId === userData.routeId && t.status === "completed",
-          );
+          const currentDriverId = String(userData.id || userData.uid || "");
+          const availableRoutes = res.routes || (route ? [route] : []);
+
+          const completedTrips = res.trips.filter((t: any) => {
+            const isCompleted = t.status === "completed" || !!t.endedAt;
+            const isDriverTrip =
+              !t.driverId ||
+              String(t.driverId) === currentDriverId ||
+              (userData.routeId && String(t.routeId) === String(userData.routeId));
+            return isCompleted && isDriverTrip;
+          });
+
           const filtered = completedTrips.filter((t: any) => {
             const date = (t.startedAt || t.endedAt || "").split("T")[0];
-            return date >= startDate && date <= endDate;
+            if (!date) return true;
+            return (!startDate || date >= startDate) && (!endDate || date <= endDate);
           });
+
+          // Enrich trips with resolved route name so it is ALWAYS accurately displayed
+          const enriched = filtered.map((t: any) => {
+            const matchedRoute = availableRoutes.find(
+              (r: any) => String(r.id) === String(t.routeId)
+            );
+            return {
+              ...t,
+              routeName:
+                t.routeName ||
+                matchedRoute?.name ||
+                (t.routeId ? `Route ${t.routeId}` : route?.name || "Assigned Route"),
+            };
+          });
+
           setHistoryTrips(
-            filtered.sort((a: any, b: any) =>
-              (b.startedAt || "").localeCompare(a.startedAt || ""),
+            enriched.sort((a: any, b: any) =>
+              (b.startedAt || "").localeCompare(a.startedAt || "")
             ),
           );
           setShowHistory(true);
@@ -1137,77 +1172,96 @@ export default function DriverDashboard({
     }
   };
 
-  const exportHistory = () => {
+  const exportHistory = async () => {
     if (historyTrips.length === 0)
       return toast.error("No history found for this range");
 
-    // Header for detailed multi-trip report
-    let csv =
-      "Trip Date,Direction,Route,Passenger Name,Passenger ID,Pickup Status,Pickup Time,Dropoff Status,Dropoff Time,Trip Start,Trip End\n";
+    const driverName = userData?.name || "Driver";
+    const orgName = org?.name || "Organization";
+    const exportTime = new Date().toLocaleString();
+
+    // 1. Report Metadata Section
+    let csv = `"TRIP HISTORY REPORT - ${orgName.toUpperCase()}"\n`;
+    csv += `"Driver Name","${driverName}","Generated At","${exportTime}"\n`;
+    csv += `"Date Range","${startDate} to ${endDate}","Total Trips In Range","${historyTrips.length}"\n\n`;
+
+    // 2. Comprehensive Trip & Passenger Manifest Columns
+    csv += `"Trip Date","Route Name","Direction","Trip Start","Trip End","Passenger Name","Passenger ID","Stop Name","Pickup Status","Pickup Time","Dropoff Status","Dropoff Time"\n`;
 
     const userSummary: Record<
       string,
-      { name: string; studentId: string; pickups: number; drops: number }
+      { name: string; studentId: string; pickups: number; drops: number; absents: number }
     > = {};
 
     historyTrips.forEach((t) => {
       const startDateObj = parseToDate(t.startedAt);
       const endDateObj = parseToDate(t.endedAt);
       const date = startDateObj ? startDateObj.toLocaleDateString() : "N/A";
-      const start = startDateObj ? startDateObj.toLocaleTimeString() : "N/A";
-      const end = endDateObj ? endDateObj.toLocaleTimeString() : "N/A";
+      const start = startDateObj
+        ? startDateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "N/A";
+      const end = endDateObj
+        ? endDateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "N/A";
       const direction =
-        t.direction === "pickup" ? "Pick to ORG" : "Drop to Home";
-      const routeName = route?.name || "N/A";
+        t.direction === "pickup" ? "Pick-up to Org" : "Drop-off to Home";
+      const routeTitle =
+        t.routeName ||
+        (t.routeId && route?.id === t.routeId ? route?.name : "") ||
+        route?.name ||
+        "Assigned Route";
 
       if (t.manifest && Array.isArray(t.manifest) && t.manifest.length > 0) {
         t.manifest.forEach((m: any) => {
           const pType = parseToDate(m.pickupUpdatedAt);
           const dType = parseToDate(m.dropoffUpdatedAt);
 
-          const pTime = pType ? pType.toLocaleTimeString() : "---";
-          const dTime = dType ? dType.toLocaleTimeString() : "---";
+          const pTime = pType
+            ? pType.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "---";
+          const dTime = dType
+            ? dType.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "---";
 
           const currentMember = manifest.find(
             (pm: any) => pm.uid === m.uid || pm.id === m.uid || pm.id === m.id,
           );
-          const passengerId = m.studentId || currentMember?.studentId || "";
+          const passengerId = m.studentId || currentMember?.studentId || m.id || "";
+          const stopName = m.pickupPointName || m.stopName || "Station Stop";
 
-          csv += `"${date}","${direction}","${routeName}","${m.name}","${passengerId}","${m.pickupStatus}","${pTime}","${m.dropoffStatus}","${dTime}","${start}","${end}"\n`;
+          csv += `"${date}","${routeTitle}","${direction}","${start}","${end}","${m.name}","${passengerId}","${stopName}","${m.pickupStatus || "pending"}","${pTime}","${m.dropoffStatus || "pending"}","${dTime}"\n`;
 
-          // Track summary
-          if (m.uid) {
-            if (!userSummary[m.uid]) {
-              userSummary[m.uid] = {
+          const pKey = m.uid || m.id || m.name;
+          if (pKey) {
+            if (!userSummary[pKey]) {
+              userSummary[pKey] = {
                 name: m.name,
                 studentId: passengerId,
                 pickups: 0,
                 drops: 0,
+                absents: 0,
               };
             }
-            if (m.pickupStatus === "picked") userSummary[m.uid].pickups++;
-            if (m.dropoffStatus === "dropped") userSummary[m.uid].drops++;
+            if (m.pickupStatus === "picked") userSummary[pKey].pickups++;
+            if (m.dropoffStatus === "dropped") userSummary[pKey].drops++;
+            if (m.pickupStatus === "absent" || m.dropoffStatus === "absent")
+              userSummary[pKey].absents++;
           }
         });
       } else {
-        csv += `"${date}","${direction}","${routeName}","N/A","N/A","N/A","N/A","N/A","N/A","${start}","${end}"\n`;
+        csv += `"${date}","${routeTitle}","${direction}","${start}","${end}","No passenger manifest recorded","---","---","---","---","---","---"\n`;
       }
     });
 
-    // Append Summary Section
-    csv += "\n\nUSER-WISE TRIP SUMMARY\n";
-    csv += "User Name,User ID,Total Pickups,Total Drops\n";
-    Object.entries(userSummary).forEach(([uid, data]) => {
-      csv += `"${data.name}","${data.studentId}","${data.pickups}","${data.drops}"\n`;
+    // 3. User-wise Summary Section
+    csv += "\n\n\"PASSENGER ATTENDANCE SUMMARY\"\n";
+    csv += "\"Passenger Name\",\"Passenger ID\",\"Total Pickups\",\"Total Dropoffs\",\"Total Absences\"\n";
+    Object.values(userSummary).forEach((data) => {
+      csv += `"${data.name}","${data.studentId}","${data.pickups}","${data.drops}","${data.absents}"\n`;
     });
 
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `detailed_trip_report_${startDate}_to_${endDate}.csv`;
-    a.click();
-    toast.success("Detailed history exported");
+    const fileName = `Trip_History_${startDate}_to_${endDate}.csv`;
+    await exportCsvFile(fileName, csv);
   };
 
   const handleExport = () => {
@@ -1728,7 +1782,7 @@ export default function DriverDashboard({
                   <div className="py-20 text-center text-slate-300">
                     <Clock size={48} className="mx-auto mb-4 opacity-10" />
                     <p className="text-[10px] font-black uppercase tracking-widest">
-                      No history found
+                      No history found for this range
                     </p>
                   </div>
                 ) : (
@@ -1737,86 +1791,54 @@ export default function DriverDashboard({
                       key={t.id}
                       className="p-4 rounded-3xl bg-slate-50 border border-slate-100 flex items-center justify-between group"
                     >
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
                         <div
                           className={cn(
-                            "w-10 h-10 rounded-2xl border flex items-center justify-center",
+                            "w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0",
                             t.direction === "dropoff"
                               ? "bg-amber-50 text-amber-500 border-amber-100"
                               : "bg-blue-50 text-blue-500 border-blue-100",
                           )}
                         >
                           {t.direction === "dropoff" ? (
-                            <MapPin size={18} />
+                            <MapPin size={20} />
                           ) : (
-                            <Target size={18} />
+                            <Target size={20} />
                           )}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-black text-slate-900 uppercase italic leading-none">
-                              {parseToDate(t.startedAt)?.toLocaleDateString() ||
-                                "Past Trip"}
-                            </p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="text-[10px] font-black uppercase text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100 flex items-center gap-1 tracking-wider">
+                              <Route size={12} className="shrink-0" />
+                              <span className="truncate max-w-[160px] sm:max-w-[220px]">
+                                {t.routeName || "Assigned Route"}
+                              </span>
+                            </span>
                             <span
                               className={cn(
-                                "text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md",
+                                "text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md shrink-0",
                                 t.direction === "dropoff"
                                   ? "bg-amber-100 text-amber-700"
-                                  : "bg-blue-100 text-blue-700",
+                                  : "bg-emerald-100 text-emerald-700",
                               )}
                             >
-                              {t.direction === "dropoff" ? "Drop" : "Pick"}
+                              {t.direction === "dropoff" ? "Drop-off to Home" : "Pick-up to Org"}
                             </span>
                           </div>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                            {t.manifest?.length || 0} Passengers Handled •{" "}
-                            {parseToDate(t.startedAt)
-                              ?.toLocaleTimeString(undefined, {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                          <div className="flex items-center gap-2 text-xs font-black text-slate-800 uppercase italic">
+                            <span>{parseToDate(t.startedAt)?.toLocaleDateString() || "Past Trip"}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-[10px] font-bold text-slate-500 not-italic">
+                              {parseToDate(t.startedAt)?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              {t.endedAt ? ` - ${parseToDate(t.endedAt)?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+                            </span>
+                          </div>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5 flex items-center gap-1.5">
+                            <Users size={11} className="text-slate-400" />
+                            <span>{t.manifest?.length || 0} Passengers Handled</span>
                           </p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => {
-                          const directionLabel =
-                            t.direction === "pickup"
-                              ? "Pick to ORG"
-                              : "Drop to Home";
-                          let csv =
-                            "Date,Direction,Name,ID,Pickup Status,Pickup Time,Dropoff Status,Dropoff Time\n";
-
-                          t.manifest?.forEach((m: any) => {
-                            const pDate = m.pickupUpdatedAt ? parseToDate(m.pickupUpdatedAt) : null;
-                            const dDate = m.dropoffUpdatedAt ? parseToDate(m.dropoffUpdatedAt) : null;
-                            const pTime = pDate ? pDate.toLocaleTimeString() : "---";
-                            const dTime = dDate ? dDate.toLocaleTimeString() : "---";
-                            const currentMember = manifest.find(
-                              (pm: any) =>
-                                pm.uid === m.uid ||
-                                pm.id === m.uid ||
-                                pm.id === m.id,
-                            );
-                            const passengerId =
-                              m.studentId || currentMember?.studentId || "";
-                            const tripStartDate = parseToDate(t.startedAt);
-                            const tripDateStr = tripStartDate ? tripStartDate.toLocaleDateString() : "N/A";
-                            csv += `"${tripDateStr}","${directionLabel}","${m.name}","${passengerId}","${m.pickupStatus}","${pTime}","${m.dropoffStatus}","${dTime}"\n`;
-                          });
-
-                          const blob = new Blob([csv], { type: "text/csv" });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `trip_${t.id}_manifest.csv`;
-                          a.click();
-                        }}
-                        className="p-3 bg-white text-blue-600 rounded-xl border border-slate-100 shadow-sm opacity-0 group-hover:opacity-100 transition-all active:scale-90"
-                      >
-                        <Download size={16} />
-                      </button>
                     </div>
                   ))
                 )}
@@ -1824,10 +1846,16 @@ export default function DriverDashboard({
 
               <button
                 onClick={exportHistory}
-                className="w-full py-6 bg-slate-900 text-white rounded-[2.5rem] font-black text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3"
+                disabled={historyTrips.length === 0}
+                className={cn(
+                  "w-full py-4.5 sm:py-5 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer",
+                  historyTrips.length > 0
+                    ? "bg-slate-900 hover:bg-slate-800"
+                    : "bg-slate-300 cursor-not-allowed"
+                )}
               >
                 <Download size={18} />
-                <span>Download History</span>
+                <span>Download History Report ({historyTrips.length} {historyTrips.length === 1 ? "Trip" : "Trips"})</span>
               </button>
             </motion.div>
           </motion.div>

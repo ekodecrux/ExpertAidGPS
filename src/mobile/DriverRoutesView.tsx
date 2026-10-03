@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Users, CheckCircle, XCircle, Clock, ChevronRight, User as UserIcon, AlertTriangle, Navigation, Phone, ArrowUp, ArrowDown, SlidersHorizontal } from 'lucide-react';
+import { MapPin, Users, CheckCircle, XCircle, Clock, ChevronRight, User as UserIcon, AlertTriangle, Navigation, Phone, ArrowUp, ArrowDown, SlidersHorizontal, History } from 'lucide-react';
 import { doc, onSnapshot, updateDoc, collection, query, where, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -285,9 +285,19 @@ export default function DriverRoutesView({ driverData, driverDataLoading }: Driv
           <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1 italic">Current Route</p>
           <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{route.name}</h2>
         </div>
-        <div className="bg-slate-900 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-slate-900/20">
-          <Clock size={14} className="text-blue-400" />
-          <span className="text-[10px] font-black tracking-tighter">{route.startTime}</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('open-driver-history'))}
+            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 px-3 py-2 rounded-2xl flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+            title="View Past Trips & Reports"
+          >
+            <History size={13} className="text-emerald-600" />
+            <span className="text-[10px] font-black uppercase tracking-wider">History</span>
+          </button>
+          <div className="bg-slate-900 text-white px-3.5 py-2 rounded-2xl flex items-center gap-1.5 shadow-lg shadow-slate-900/20">
+            <Clock size={14} className="text-blue-400" />
+            <span className="text-[10px] font-black tracking-tighter">{route.startTime}</span>
+          </div>
         </div>
       </div>
 

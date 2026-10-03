@@ -2211,17 +2211,24 @@ async function start() {
         };
       });
       
-      // Query trips for this org - optimized to pull only live/ongoing trips or past trips matching the user's route
+      // Query trips for this org - for drivers, query trips matching their driverId, routeId, or organization
       let tripRows: any[] = [];
-      if (routeId) {
+      const userRole = (currentUser.role || "").toLowerCase();
+      if (userRole === "driver") {
         const [rows] = await conn.query(
-          "SELECT * FROM trips WHERE orgId = ? AND (routeId = ? OR status = 'live' OR status = 'ongoing') ORDER BY id DESC LIMIT 20",
+          "SELECT * FROM trips WHERE orgId = ? AND (driverId = ? OR driverId = ? OR routeId = ? OR status = 'live' OR status = 'ongoing' OR status = 'completed') ORDER BY id DESC LIMIT 150",
+          [orgId, uid, currentUser.id || uid, routeId || ""]
+        ) as any[];
+        tripRows = rows;
+      } else if (routeId) {
+        const [rows] = await conn.query(
+          "SELECT * FROM trips WHERE orgId = ? AND (routeId = ? OR status = 'live' OR status = 'ongoing') ORDER BY id DESC LIMIT 50",
           [orgId, routeId]
         ) as any[];
         tripRows = rows;
       } else {
         const [rows] = await conn.query(
-          "SELECT * FROM trips WHERE orgId = ? AND (status = 'live' OR status = 'ongoing') ORDER BY id DESC LIMIT 20",
+          "SELECT * FROM trips WHERE orgId = ? AND (status = 'live' OR status = 'ongoing' OR status = 'completed') ORDER BY id DESC LIMIT 50",
           [orgId]
         ) as any[];
         tripRows = rows;
@@ -2234,8 +2241,14 @@ async function start() {
         try {
           tManifest = t.manifest ? JSON.parse(t.manifest) : [];
         } catch (e) {}
+
+        // Match route from routes array to ensure routeName is always populated properly
+        const matchedRoute = routes.find((r: any) => String(r.id) === String(t.routeId));
+        const resolvedRouteName = t.routeName || matchedRoute?.name || (t.routeId ? `Route ${t.routeId}` : "Assigned Route");
+
         return {
           ...t,
+          routeName: resolvedRouteName,
           location: locObj,
           manifest: tManifest,
           startedAt: t.startedAt || t.startTime || null,
@@ -5070,7 +5083,7 @@ async function start() {
       }
     });
   } else {
-    const distPath = path.join(process.cwd(), "dist/public");
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*all", (req, res) => {
       if (req.originalUrl.startsWith('/api')) {

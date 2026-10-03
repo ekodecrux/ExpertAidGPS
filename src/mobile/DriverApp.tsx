@@ -3,7 +3,7 @@ import MobileLayout from '../components/MobileLayout';
 import DriverDashboard from '../pages/DriverDashboard';
 import DriverRoutesView from './DriverRoutesView';
 import DriverMapView from './DriverMapView';
-import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight, MapPin, ShieldCheck } from 'lucide-react';
+import { Home, Map, MessageSquare, User, ListChecks, Play, Square, Navigation, Power, Mail, Phone, Shield, Truck, Key, Camera, ChevronRight, MapPin, ShieldCheck, History } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, auth, auth as firebaseAuth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -488,6 +488,31 @@ export default function DriverApp() {
                     <p className="text-xs font-bold text-slate-900 uppercase italic tracking-wider">{userData?.vehicleId || 'Not Assigned'}</p>
                   </div>
                 </div>
+              </div>
+
+              <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-50 space-y-4">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 mb-4">Trip History &amp; Records</h3>
+                
+                <button 
+                  onClick={() => {
+                    setActiveTab('home');
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent('open-driver-history'));
+                    }, 50);
+                  }}
+                  className="w-full flex items-center justify-between p-4 bg-emerald-50/80 border border-emerald-100 rounded-2xl text-emerald-800 active:scale-95 transition-all text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+                      <History size={18} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-wider leading-tight">Trip History &amp; Manifests</p>
+                      <p className="text-[9px] text-emerald-700/80 font-bold mt-0.5">Filter routes, dates, manifest &amp; download reports</p>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-emerald-500 shrink-0" />
+                </button>
               </div>
 
               <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-50 space-y-4">
