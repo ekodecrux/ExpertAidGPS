@@ -660,22 +660,25 @@ function Overview({ stats, org, userData, membersLabel, vehicles, routes, liveTr
                     </Popup>
                   </Marker>
                )}
-               {vehicles.map((v: any) => v.location && isValidCoordinate(v.location.lat, v.location.lng) && (
-                  <Marker 
-                     key={v.id} 
-                     position={[v.location.lat, v.location.lng]} 
+               {/* Only render vehicles currently on an ACTIVE trip on road */}
+               {activeTrips.map((trip: any) => {
+                 const vehicle = vehicles.find((v: any) => String(v.id) === String(trip.vehicleId));
+                 const busLoc = trip.location || vehicle?.location;
+                 if (!busLoc || !isValidCoordinate(busLoc.lat, busLoc.lng)) return null;
+                 return (
+                   <Marker 
+                     key={`ov-trip-${trip.id}`} 
+                     position={[busLoc.lat, busLoc.lng]} 
                      icon={vehicleIcon}
-                  />
-               ))}
-               {drivers.map((d: any) => {
-                  const dLoc = d.location || (isValidCoordinate(d.latitude, d.longitude) ? { lat: Number(d.latitude), lng: Number(d.longitude) } : null);
-                  return dLoc && isValidCoordinate(dLoc.lat, dLoc.lng) && (
-                    <Marker
-                      key={`ov-driver-${d.uid || d.id}`}
-                      position={[Number(dLoc.lat), Number(dLoc.lng)]}
-                      icon={createMarkerIcon('#6366f1', 'https://img.icons8.com/fluency/50/driver.png', '#6366f1', d.name || 'Driver')}
-                    />
-                  );
+                   >
+                     <Popup>
+                       <div className="p-2 text-center">
+                         <p className="text-[10px] font-black uppercase italic">{vehicle?.plateNumber || 'Live Bus'}</p>
+                         <p className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Live On Trip</p>
+                       </div>
+                     </Popup>
+                   </Marker>
+                 );
                })}
             </MapComponent>
             
@@ -4636,7 +4639,17 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
             >
               <div className="p-4 md:p-6 border-b border-slate-50 bg-slate-50/30">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] italic">Active Fleet</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] italic">Active Fleet</h4>
+                    <span className={cn(
+                      "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider",
+                      activeTrips.length > 0 
+                        ? "bg-emerald-50 text-emerald-600 border border-emerald-200 animate-pulse" 
+                        : "bg-slate-100 text-slate-400 border border-slate-200"
+                    )}>
+                      {activeTrips.length} Live
+                    </span>
+                  </div>
                   <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400"><X size={16} /></button>
                 </div>
                 <div className="relative">
@@ -4936,9 +4949,16 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                     {/* Standby / Other Fleet Vehicles Section */}
                     {standbyVehicles.length > 0 && (
                       <div className="space-y-2 pt-2 border-t border-slate-100">
-                        <div className="flex items-center gap-2 px-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Fleet Vehicles ({standbyVehicles.length})</span>
+                        <div className="flex items-center justify-between px-1">
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                              Standby Fleet ({standbyVehicles.length})
+                            </span>
+                          </div>
+                          <span className="text-[7.5px] font-bold text-slate-400 uppercase">
+                            No Active Trip
+                          </span>
                         </div>
                         {standbyVehicles.map((vehicle: any) => {
                           const driver = drivers.find((d: any) => String(d.uid) === String(vehicle.driverId) || String(d.id) === String(vehicle.driverId));
@@ -4959,42 +4979,40 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                               }}
                               className={cn(
                                 "w-full p-3 rounded-2xl border transition-all text-left relative overflow-hidden group cursor-pointer",
-                                isSelected ? "bg-slate-900 border-slate-900 shadow-md text-white" : "bg-white border-slate-50 hover:bg-slate-50"
+                                isSelected ? "bg-slate-900 border-slate-900 shadow-md text-white" : "bg-white border-slate-100 hover:bg-slate-50"
                               )}
                             >
                               <div className="flex justify-between items-center mb-1">
                                 <span className={cn("text-xs font-black uppercase leading-none", isSelected ? "text-white" : "text-slate-800")}>
                                   {vehicle.plateNumber || `Bus ${vehicle.id}`}
                                 </span>
-                                <span className={cn(
-                                  "px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-wider",
-                                  hasLoc ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-slate-100 text-slate-400"
-                                )}>
-                                  {hasLoc ? "Online" : "Standby"}
+                                <span className="px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200">
+                                  Standby
                                 </span>
                               </div>
                               <p className={cn("text-[8px] font-bold uppercase truncate", isSelected ? "text-slate-400" : "text-slate-400")}>
                                 {route?.name ? `Route: ${route.name}` : (driver?.name ? `Driver: ${driver.name}` : 'Unassigned')}
                               </p>
-                              {isSelected && <div className="absolute right-0 top-0 bottom-0 w-1 bg-emerald-500" />}
+                              {isSelected && <div className="absolute right-0 top-0 bottom-0 w-1 bg-slate-400" />}
                             </button>
                           );
                         })}
                       </div>
                     )}
 
-                    {/* Active Drivers Section */}
+                    {/* Drivers Section */}
                     {availableDrivers.length > 0 && (
                       <div className="space-y-2 pt-2 border-t border-slate-100">
                         <div className="flex items-center gap-2 px-1">
                           <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Active Drivers ({availableDrivers.length})</span>
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Drivers ({availableDrivers.length})</span>
                         </div>
                         {availableDrivers.map((driver: any) => {
                           const isSelected = selectedDriverId === String(driver.uid || driver.id);
                           const dLoc = driver.location || (isValidCoordinate(driver.latitude, driver.longitude) ? { lat: Number(driver.latitude), lng: Number(driver.longitude) } : null);
                           const hasLoc = dLoc && isValidCoordinate(dLoc.lat, dLoc.lng);
                           const assignedV = allVehicles.find((v: any) => String(v.driverId) === String(driver.uid || driver.id));
+                          const isOnTrip = activeTrips.some(t => String(t.driverId) === String(driver.uid || driver.id));
 
                           return (
                             <button
@@ -5009,7 +5027,7 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                               }}
                               className={cn(
                                 "w-full p-3 rounded-2xl border transition-all text-left relative overflow-hidden group cursor-pointer",
-                                isSelected ? "bg-indigo-950 border-indigo-900 shadow-md text-white" : "bg-white border-slate-50 hover:bg-slate-50"
+                                isSelected ? "bg-indigo-950 border-indigo-900 shadow-md text-white" : "bg-white border-slate-100 hover:bg-slate-50"
                               )}
                             >
                               <div className="flex justify-between items-center mb-1">
@@ -5018,9 +5036,11 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                                 </span>
                                 <span className={cn(
                                   "px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-wider",
-                                  hasLoc ? "bg-indigo-50 text-indigo-600 border border-indigo-100" : "bg-slate-100 text-slate-400"
+                                  isOnTrip 
+                                    ? "bg-emerald-50 text-emerald-600 border border-emerald-100 animate-pulse" 
+                                    : "bg-slate-100 text-slate-500 border border-slate-200"
                                 )}>
-                                  {hasLoc ? "GPS Active" : "Registered"}
+                                  {isOnTrip ? "Live On Trip" : "Standby"}
                                 </span>
                               </div>
                               <p className={cn("text-[8px] font-bold uppercase truncate", isSelected ? "text-indigo-200" : "text-slate-400")}>
@@ -5147,14 +5167,14 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                   <Marker
                     key={`standby-marker-${vehicle.id}`}
                     position={[Number(busLoc.lat), Number(busLoc.lng)]}
-                    icon={createMarkerIcon(isSelected ? '#10b981' : '#059669', 'https://img.icons8.com/fluency/50/bus.png', isSelected ? '#10b981' : '#059669', vehicle.plateNumber || 'FLEET BUS')}
+                    icon={createMarkerIcon(isSelected ? '#64748b' : '#94a3b8', 'https://img.icons8.com/fluency/50/bus.png', isSelected ? '#64748b' : '#94a3b8', vehicle.plateNumber || 'STANDBY BUS')}
                     eventHandlers={{ click: () => { setSelectedVehicleId(vehicle.id); setSelectedTripId(null); setSelectedDriverId(null); } }}
                   >
                     <Popup>
                       <div className="p-2 min-w-[160px]">
                         <p className="text-xs font-black text-slate-900 border-b border-slate-100 pb-1 mb-1">{vehicle.plateNumber || 'Fleet Vehicle'}</p>
                         <div className="space-y-1 my-2 text-[8px] font-bold uppercase tracking-widest text-slate-500">
-                          <p className="flex justify-between"><span>Status:</span> <span className="text-emerald-600 font-black">Online / Ready</span></p>
+                          <p className="flex justify-between"><span>Status:</span> <span className="text-slate-600 font-black">Standby (Trip Not Started)</span></p>
                           {driver && (
                             <>
                               <p className="flex justify-between"><span>Driver:</span> <span className="text-slate-900">{driver.name}</span></p>
@@ -5162,7 +5182,7 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                             </>
                           )}
                         </div>
-                        <button onClick={() => { setSelectedVehicleId(vehicle.id); setSelectedTripId(null); setSelectedDriverId(null); }} className="mt-2 w-full py-1.5 bg-emerald-600 text-white rounded-lg text-[8px] font-black uppercase tracking-widest active:scale-95 transition-all">Track Bus</button>
+                        <button onClick={() => { setSelectedVehicleId(vehicle.id); setSelectedTripId(null); setSelectedDriverId(null); }} className="mt-2 w-full py-1.5 bg-slate-700 text-white rounded-lg text-[8px] font-black uppercase tracking-widest active:scale-95 transition-all">Inspect Vehicle</button>
                       </div>
                     </Popup>
                   </Marker>
