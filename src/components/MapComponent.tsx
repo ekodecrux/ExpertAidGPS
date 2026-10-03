@@ -2,7 +2,9 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Polyline } from 'react-leaflet';
 import L from 'leaflet';
-import { Locate, Maximize2, Minimize2, Layers, Plus, Minus, Target, Loader2, Check, X } from 'lucide-react';
+import { Locate, Maximize2, Minimize2, Layers, Plus, Minus, Target, Loader2, Check, X, Map } from 'lucide-react';
+import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor } from '@capacitor/core';
 import { cn, getLocalIcon } from '../lib/utils';
 import { getLastKnownLocation, saveLastKnownLocation } from '../lib/locationService';
 import toast from 'react-hot-toast';
@@ -107,7 +109,7 @@ export const vehicleIcon = createMarkerIcon('#3b82f6', getLocalIcon('bus'), '#3b
 export const stationIcon = createMarkerIcon('#10b981', getLocalIcon('bus-stop'), '#34d399');
 export const terminalIcon = createMarkerIcon('#f43f5e', getLocalIcon('marker'), '#fb7185');
 
-function UserLocationMarker({ highAccuracy = false }: { highAccuracy?: boolean }) {
+function UserLocationMarker({ highAccuracy = true }: { highAccuracy?: boolean }) {
   const cached = getLastKnownLocation();
   const [position, setPosition] = useState<[number, number] | null>(
     cached ? [cached.lat, cached.lng] : null
@@ -117,45 +119,91 @@ function UserLocationMarker({ highAccuracy = false }: { highAccuracy?: boolean }
   useEffect(() => {
     if (!map) return;
     let isMounted = true;
+    let capacitorWatchId: string | null = null;
+    let browserWatchId: number | null = null;
 
-    // Fast initial check with browser geolocation for 0ms lag
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (!isMounted) return;
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-            saveLastKnownLocation(lat, lng);
-            setPosition([lat, lng]);
+    const startLocationTracking = async () => {
+      // 1. Mobile Native App (Capacitor) High-Accuracy GPS
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const perm = await Geolocation.checkPermissions();
+          if (perm.location !== 'granted' && perm.coarseLocation !== 'granted') {
+            await Geolocation.requestPermissions();
           }
-        },
-        () => {},
-        { enableHighAccuracy: false, timeout: 3000, maximumAge: 60000 }
-      );
-    }
+          const pos = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          });
+          if (pos?.coords && isMounted) {
+            const { latitude: lat, longitude: lng } = pos.coords;
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+              saveLastKnownLocation(lat, lng);
+              setPosition([lat, lng]);
+            }
+          }
 
-    const handleFound = (e: L.LocationEvent) => {
-      if (!isMounted) return;
-      if (e.latlng && !isNaN(e.latlng.lat) && !isNaN(e.latlng.lng)) {
-        saveLastKnownLocation(e.latlng.lat, e.latlng.lng);
-        setPosition([e.latlng.lat, e.latlng.lng]);
+          capacitorWatchId = await Geolocation.watchPosition(
+            { enableHighAccuracy: true },
+            (watchPos) => {
+              if (!isMounted || !watchPos?.coords) return;
+              const { latitude: lat, longitude: lng } = watchPos.coords;
+              if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                saveLastKnownLocation(lat, lng);
+                setPosition([lat, lng]);
+              }
+            }
+          );
+          return;
+        } catch (capErr) {
+          console.warn("Capacitor Geolocation notice:", capErr);
+        }
+      }
+
+      // 2. High-Accuracy Browser Geolocation
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (!isMounted) return;
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+              saveLastKnownLocation(lat, lng);
+              setPosition([lat, lng]);
+            }
+          },
+          (err) => {
+            console.warn("High-accuracy geolocation initial fix fallback:", err);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+
+        browserWatchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            if (!isMounted) return;
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+              saveLastKnownLocation(lat, lng);
+              setPosition([lat, lng]);
+            }
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
       }
     };
 
-    map.on('locationfound', handleFound);
-    try {
-      map.locate({ watch: true, enableHighAccuracy: highAccuracy, timeout: 10000, maximumAge: 30000 });
-    } catch (e) {
-      console.warn('map.locate error', e);
-    }
+    startLocationTracking();
 
     return () => {
       isMounted = false;
-      try {
-        map.stopLocate();
-        map.off('locationfound', handleFound);
-      } catch (e) {}
+      if (capacitorWatchId) {
+        Geolocation.clearWatch({ id: capacitorWatchId }).catch(() => {});
+      }
+      if (browserWatchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.clearWatch(browserWatchId);
+      }
     };
   }, [map, highAccuracy]);
 
@@ -471,20 +519,37 @@ function CustomControls({
     }
   }, []);
 
-  const onLocate = () => {
-    // 1. Immediate execution: fly immediately to cached position (0ms latency)
-    const cached = getLastKnownLocation();
-    let hasCentered = false;
-
-    if (cached && typeof cached.lat === 'number' && typeof cached.lng === 'number' && !isNaN(cached.lat) && !isNaN(cached.lng)) {
-      hasCentered = true;
-      map.flyTo([cached.lat, cached.lng], Math.max(map.getZoom(), 16), { animate: true, duration: 0.5 });
-      safeToast.success('Centered on current location', { id: 'gps-locate', duration: 1500 });
-    }
-
+  const onLocate = async () => {
     setIsLocating(true);
 
-    // 2. Fast direct browser Geolocation with low-accuracy for instant cellular/WiFi fix
+    // 1. Mobile Native App (Capacitor) High-Accuracy GPS
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const perm = await Geolocation.checkPermissions();
+        if (perm.location !== 'granted' && perm.coarseLocation !== 'granted') {
+          await Geolocation.requestPermissions();
+        }
+        const pos = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        });
+        if (pos?.coords) {
+          const { latitude: lat, longitude: lng } = pos.coords;
+          if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+            saveLastKnownLocation(lat, lng);
+            map.flyTo([lat, lng], 18, { animate: true, duration: 0.8 });
+            safeToast.success('Centered on current GPS location', { id: 'gps-locate' });
+            setIsLocating(false);
+            return;
+          }
+        }
+      } catch (capErr: any) {
+        console.warn("Capacitor onLocate notice:", capErr);
+      }
+    }
+
+    // 2. High-Accuracy Web Geolocation
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -492,41 +557,27 @@ function CustomControls({
           const lng = pos.coords.longitude;
           if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
             saveLastKnownLocation(lat, lng);
-            map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 0.5 });
-            safeToast.success('Centered on current location', { id: 'gps-locate', duration: 1500 });
+            map.flyTo([lat, lng], 18, { animate: true, duration: 0.8 });
+            safeToast.success('Centered on current location', { id: 'gps-locate' });
           }
           setIsLocating(false);
         },
         (err) => {
-          console.warn('Fast geolocation fallback:', err.message);
-          // Try high accuracy fallback
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              const lat = pos.coords.latitude;
-              const lng = pos.coords.longitude;
-              if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-                saveLastKnownLocation(lat, lng);
-                map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 0.5 });
-                safeToast.success('Centered on current location', { id: 'gps-locate', duration: 1500 });
-              }
-              setIsLocating(false);
-            },
-            () => {
-              setIsLocating(false);
-              if (!hasCentered) {
-                safeToast.error('Unable to retrieve location. Please check browser GPS permissions.', { id: 'gps-locate' });
-              }
-            },
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-          );
+          console.warn("High-accuracy locate fallback:", err);
+          const cached = getLastKnownLocation();
+          if (cached) {
+            map.flyTo([cached.lat, cached.lng], 18, { animate: true, duration: 0.8 });
+            safeToast.success('Centered on last known location', { id: 'gps-locate' });
+          } else {
+            safeToast.error('Please allow location permissions to locate your device', { id: 'gps-locate' });
+          }
+          setIsLocating(false);
         },
-        { enableHighAccuracy: false, timeout: 3000, maximumAge: 60000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
       setIsLocating(false);
-      if (!hasCentered) {
-        safeToast.error('Geolocation is not supported by your browser.', { id: 'gps-locate' });
-      }
+      safeToast.error('Geolocation is not supported by your browser', { id: 'gps-locate' });
     }
   };
 
@@ -613,72 +664,28 @@ function CustomControls({
         </button>
       </div>
 
-      {/* Map Style & Layer Details Selector */}
+      {/* Map Style: 1-Click Direct Toggle (Default Map <-> Satellite Map) */}
       {!hideMapStyles && (
-        <div className="relative">
-          <button 
-            type="button"
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              setIsLayersOpen(!isLayersOpen);
-            }}
-            className={cn(
-              "w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all active:scale-95 group backdrop-blur-md cursor-pointer",
-              mapType === 'satellite' || isLayersOpen
-                ? "text-blue-600 bg-blue-50/95 border-blue-300 ring-2 ring-blue-400/30 shadow-blue-100" 
-                : "text-slate-700 bg-white/95 border-slate-200/90 hover:text-blue-600 hover:bg-white"
-            )}
-            title="Switch Map Layers (Streets, Satellite, Traffic, Terrain)"
-          >
-            <Layers className="w-5 h-5" />
-          </button>
-
-          {isLayersOpen && (
-            <div 
-              className="absolute right-14 top-0 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/90 p-2 flex flex-col gap-1 z-[3000] min-w-[210px] animate-in fade-in zoom-in-95 duration-150"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="px-2.5 py-1 border-b border-slate-100 flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Map Details</span>
-                <span className="text-[9px] font-bold text-blue-600">Google Maps</span>
-              </div>
-              {(['standard', 'satellite', 'traffic', 'terrain'] as MapLayerType[]).map((type) => {
-                const layer = MAP_LAYERS[type];
-                if (!layer) return null;
-                const isActive = mapType === type;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => {
-                      if (onSelectMapType) {
-                        onSelectMapType(type);
-                      } else {
-                        onToggleMapType();
-                      }
-                      setIsLayersOpen(false);
-                    }}
-                    className={cn(
-                      "flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all text-xs font-bold cursor-pointer",
-                      isActive 
-                        ? "bg-blue-50 text-blue-700 border border-blue-200/60 shadow-2xs" 
-                        : "text-slate-700 hover:bg-slate-100/80"
-                    )}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-base">{layer.icon}</span>
-                      <div>
-                        <p className="leading-tight font-black">{layer.name}</p>
-                        <p className="text-[9px] text-slate-400 font-medium">{layer.tag}</p>
-                      </div>
-                    </div>
-                    {isActive && <Check className="w-4 h-4 text-blue-600 shrink-0 ml-2" />}
-                  </button>
-                );
-              })}
-            </div>
+        <button 
+          type="button"
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            onToggleMapType();
+          }}
+          className={cn(
+            "w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all active:scale-95 group backdrop-blur-md cursor-pointer",
+            mapType === 'satellite'
+              ? "text-blue-600 bg-blue-50/95 border-blue-300 ring-2 ring-blue-400/30 shadow-blue-100" 
+              : "text-slate-700 bg-white/95 border-slate-200/90 hover:text-blue-600 hover:bg-white"
           )}
-        </div>
+          title={mapType === 'satellite' ? "Switch to Default Map" : "Switch to Satellite Map"}
+        >
+          {mapType === 'satellite' ? (
+            <Map className="w-5 h-5 text-blue-600" />
+          ) : (
+            <Layers className="w-5 h-5" />
+          )}
+        </button>
       )}
 
       {/* Expand / Maximize (Full-screen view) */}

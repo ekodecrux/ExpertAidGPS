@@ -20,10 +20,10 @@ import { PhoneInput } from '../components/PhoneInput';
 type View = 'overview' | 'vehicles' | 'drivers' | 'members' | 'routes' | 'parents' | 'employees' | 'map' | 'settings' | 'reports';
 
 const sanitizeCenter = (coord: any): { lat: number; lng: number } => {
-  if (!coord) return { lat: 17.4504, lng: 78.3808 };
+  if (!coord) return { lat: 17.4954, lng: 78.2960 };
   const lat = parseFloat(coord.lat ?? coord.latitude);
   const lng = parseFloat(coord.lng ?? coord.longitude);
-  if (isNaN(lat) || isNaN(lng)) return { lat: 17.4504, lng: 78.3808 };
+  if (isNaN(lat) || isNaN(lng)) return { lat: 17.4954, lng: 78.2960 };
   return { lat, lng };
 };
 
@@ -637,8 +637,9 @@ function Overview({ stats, org, userData, membersLabel, vehicles, routes, liveTr
          <div className="lg:col-span-7 bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm relative h-[450px] lg:h-auto min-h-[450px]">
           <MapComponent 
             height="100%" 
-            zoom={13} 
+            zoom={15} 
             center={sanitizeCenter(org?.location)}
+            highAccuracy={true}
           >
                {org?.location && isValidCoordinate(org.location.lat, org.location.lng) && (
                   <Marker 
