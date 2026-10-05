@@ -522,17 +522,22 @@ function CustomControls({
   const onLocate = async () => {
     setIsLocating(true);
 
-    // Use the last known fix immediately while a fresh GPS request runs. This
-    // keeps the control responsive when the device needs time for a cold fix.
+    // 1. Instant 0ms response: Fly immediately to last known position
     const cached = getLastKnownLocation();
     if (cached && isValidCoordinate(cached.lat, cached.lng)) {
-      map.flyTo([cached.lat, cached.lng], Math.max(map.getZoom(), 16), {
+      map.flyTo([cached.lat, cached.lng], 18, {
         animate: true,
         duration: 0.35
       });
+      safeToast.success('Centered on current location', { id: 'gps-locate', duration: 1500 });
     }
 
-    // 1. Mobile Native App (Capacitor) High-Accuracy GPS
+    // Quick auto-dismiss loading state so the button is snappy and never hangs
+    const safetyTimer = setTimeout(() => {
+      setIsLocating(false);
+    }, 2000);
+
+    // 2. Mobile Native App (Capacitor) High-Accuracy GPS
     if (Capacitor.isNativePlatform()) {
       try {
         const perm = await Geolocation.checkPermissions();
@@ -541,15 +546,16 @@ function CustomControls({
         }
         const pos = await Geolocation.getCurrentPosition({
           enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
+          timeout: 3500,
+          maximumAge: 10000
         });
         if (pos?.coords) {
           const { latitude: lat, longitude: lng } = pos.coords;
           if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
             saveLastKnownLocation(lat, lng);
-            map.flyTo([lat, lng], 18, { animate: true, duration: 0.55 });
-            safeToast.success('Centered on current GPS location', { id: 'gps-locate' });
+            map.flyTo([lat, lng], 18, { animate: true, duration: 0.4 });
+            safeToast.success('Centered on GPS location', { id: 'gps-locate', duration: 1500 });
+            clearTimeout(safetyTimer);
             setIsLocating(false);
             return;
           }
@@ -559,33 +565,36 @@ function CustomControls({
       }
     }
 
-    // 2. High-Accuracy Web Geolocation
+    // 3. High-Accuracy Web Geolocation
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          clearTimeout(safetyTimer);
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
           if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
             saveLastKnownLocation(lat, lng);
-            map.flyTo([lat, lng], 18, { animate: true, duration: 0.55 });
-            safeToast.success('Centered on current location', { id: 'gps-locate' });
+            map.flyTo([lat, lng], 18, { animate: true, duration: 0.4 });
+            safeToast.success('Centered on current location', { id: 'gps-locate', duration: 1500 });
           }
           setIsLocating(false);
         },
         (err) => {
+          clearTimeout(safetyTimer);
           console.warn("High-accuracy locate fallback:", err);
-          const cached = getLastKnownLocation();
-          if (cached) {
-            map.flyTo([cached.lat, cached.lng], 18, { animate: true, duration: 0.35 });
-            safeToast.success('Centered on last known location', { id: 'gps-locate' });
+          const lastLoc = getLastKnownLocation();
+          if (lastLoc) {
+            map.flyTo([lastLoc.lat, lastLoc.lng], 18, { animate: true, duration: 0.35 });
+            safeToast.success('Centered on known location', { id: 'gps-locate', duration: 1500 });
           } else {
-            safeToast.error('Please allow location permissions to locate your device', { id: 'gps-locate' });
+            safeToast.error('Please allow location permissions to locate device', { id: 'gps-locate', duration: 2000 });
           }
           setIsLocating(false);
         },
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 15000 }
+        { enableHighAccuracy: true, timeout: 3500, maximumAge: 15000 }
       );
     } else {
+      clearTimeout(safetyTimer);
       setIsLocating(false);
       safeToast.error('Geolocation is not supported by your browser', { id: 'gps-locate' });
     }

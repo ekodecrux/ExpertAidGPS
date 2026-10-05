@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bus, Users, Route, TrendingUp, AlertCircle, Calendar, ShieldCheck, MapPin, Plus, Search, Trash2, Edit2, Edit3, X, Save, UserCheck, UserPlus, Navigation, ArrowRight, Gauge, Activity, Maximize2, UserCircle, Map as MapIcon, ChevronRight, Mail, Building2, CheckCircle, Check, Pencil, Link2Off, ChevronDown, School, GraduationCap, Clock, Download, Eye, Upload } from 'lucide-react';
+import { Bus, Users, Route, TrendingUp, AlertCircle, Calendar, ShieldCheck, MapPin, Plus, Search, Trash2, Edit2, Edit3, X, Save, UserCheck, UserPlus, Navigation, ArrowRight, Gauge, Activity, Maximize2, UserCircle, Map as MapIcon, ChevronRight, Mail, Building2, CheckCircle, Check, Pencil, Link2Off, ChevronDown, School, GraduationCap, Clock, Download, Eye, Upload, KeyRound, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -697,13 +697,6 @@ function Overview({ stats, org, userData, membersLabel, vehicles, routes, liveTr
                  );
                })}
             </MapComponent>
-            
-            <button 
-              onClick={() => setActiveView('map')}
-              className="absolute bottom-6 right-6 z-[999] p-3 bg-white rounded-xl shadow-xl border border-slate-200 text-slate-400 hover:text-blue-500 transition-all active:scale-95 group"
-            >
-               <Maximize2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            </button>
          </div>
       </div>
     </motion.div>
@@ -909,8 +902,9 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
         </button>
       </div>
 
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-slate-50">
@@ -974,7 +968,7 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
                          >
                             <Edit3 className="w-4 h-4" />
                          </button>
-                         <button onClick={() => handleDelete(v)} className="p-2.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                         <button onClick={() => handleDelete(v)} className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
                             <Trash2 className="w-4 h-4" />
                          </button>
                       </div>
@@ -992,6 +986,85 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View: Vertical Data Display with Clean Vertical Scroll */}
+        <div className="md:hidden divide-y divide-slate-100 p-3 space-y-3">
+          {vehicles.map((v: any) => {
+            const isActive = routes.some((r: any) => r.vehicleId === v.id && members.some((m: any) => m.routeId === r.id));
+            const linkedRoute = routes.find((r: any) => r.vehicleId === v.id);
+            const linkedDriver = members.find((m: any) => m.vehicleId === v.id);
+
+            return (
+              <div key={v.id} className="pt-3 first:pt-0 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 bg-indigo-50/80 rounded-xl flex items-center justify-center text-indigo-600 shrink-0 border border-indigo-100/50">
+                      <Bus className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black text-slate-900 uppercase truncate">{v.model || "Unknown Model"}</h4>
+                      <span className="text-[11px] font-mono font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100/50 inline-block mt-0.5">
+                        {v.plateNumber || "UNREGISTERED"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-wider border shrink-0",
+                    isActive 
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
+                      : "bg-slate-100 text-slate-500 border-slate-200"
+                  )}>
+                    <div className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-emerald-500 animate-pulse" : "bg-slate-400")} />
+                    {isActive ? 'Active' : 'Inactive'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50/70 p-2.5 rounded-xl text-[10px] space-y-1 border border-slate-100">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px]">Assigned Route:</span>
+                    <span className="font-black text-slate-800 uppercase text-[9px] truncate max-w-[170px]">{linkedRoute?.name || 'Unassigned'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px]">Assigned Driver:</span>
+                    <span className="font-black text-slate-800 uppercase text-[9px] truncate max-w-[170px]">{linkedDriver?.name || 'Unassigned'}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-0.5">
+                  {linkedRoute ? (
+                    <button 
+                      onClick={() => { window.location.href = `/map?routeId=${linkedRoute.id}`; }}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest border border-blue-100 active:scale-95"
+                    >
+                      <Navigation className="w-3 h-3" /> Track Bus
+                    </button>
+                  ) : <div />}
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => { setEditingVehicle(v); setIsEditModalOpen(true); }}
+                      className="p-2 text-slate-500 hover:text-blue-600 bg-slate-100 rounded-xl active:scale-95 transition-all"
+                      title="Edit Vehicle"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(v)}
+                      className="p-2 text-slate-500 hover:text-rose-600 bg-slate-100 rounded-xl active:scale-95 transition-all"
+                      title="Delete Vehicle"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {vehicles.length === 0 && (
+            <div className="py-12 text-center text-slate-400 italic text-xs uppercase tracking-widest">
+              No vehicles registered yet
+            </div>
+          )}
         </div>
       </div>
 
@@ -1312,8 +1385,9 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
         </button>
       </div>
 
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-slate-50">
@@ -1408,6 +1482,85 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View: Vertical Data Display with Clean Vertical Scroll */}
+        <div className="md:hidden divide-y divide-slate-100 p-3 space-y-3">
+          {drivers.map((d: any) => {
+            const isActive = routes.some((r: any) => r.driverId === d.uid && members.some((m: any) => m.routeId === r.id));
+            const assignedRoute = routes.find((r: any) => r.id === d.routeId);
+            const assignedVehicle = vehicles.find((v: any) => v.id === d.vehicleId);
+
+            return (
+              <div key={d.id || d.uid} className="pt-3 first:pt-0 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden shrink-0 shadow-2xs">
+                      <img src={getUserAvatar(d.avatarUrl, d.photoURL, d.name, d.uid)} alt="Avatar" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black text-slate-900 uppercase italic leading-tight truncate">{d.name}</h4>
+                      <p className="text-[10px] font-bold text-slate-400 truncate max-w-[180px]">{d.email}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {d.phone && <span className="text-[8px] font-mono text-slate-400">PH: {d.phone}</span>}
+                        {d.licenseNumber && <span className="text-[8px] font-mono text-slate-400">DL: {d.licenseNumber}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className={cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-wider border shrink-0",
+                    isActive ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-slate-100 text-slate-500 border-slate-200"
+                  )}>
+                    <div className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-emerald-500 animate-pulse" : "bg-slate-400")} />
+                    {isActive ? 'Active' : 'Inactive'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50/70 p-2.5 rounded-xl text-[10px] space-y-1 border border-slate-100">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px]">Assigned Route:</span>
+                    <span className="font-black text-blue-600 uppercase text-[9px] truncate max-w-[170px]">{assignedRoute?.name || 'Unassigned'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px]">Assigned Vehicle:</span>
+                    <span className="font-black text-green-600 uppercase text-[9px] truncate max-w-[170px]">{assignedVehicle?.plateNumber || 'Unassigned'}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-0.5">
+                  <button 
+                    disabled={resending === d.uid}
+                    onClick={() => handleResend(d.uid)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-[9px] font-black uppercase tracking-wider disabled:opacity-50 active:scale-95 transition-all"
+                  >
+                    {resending === d.uid ? <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /> : <Mail className="w-3 h-3 text-blue-600" />}
+                    {resending === d.uid ? "Sending..." : "Resend"}
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => { setEditingDriver(d); setIsEditModalOpen(true); }}
+                      className="p-2 text-slate-500 hover:text-blue-600 bg-slate-100 rounded-xl active:scale-95 transition-all"
+                      title="Edit Operator"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(d)}
+                      className="p-2 text-slate-500 hover:text-rose-600 bg-slate-100 rounded-xl active:scale-95 transition-all"
+                      title="Delete Operator"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {drivers.length === 0 && (
+            <div className="py-12 text-center text-slate-400 italic text-xs uppercase tracking-widest">
+              No operators found
+            </div>
+          )}
         </div>
       </div>
 
@@ -4607,10 +4760,17 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
             All Buses
           </button>
           <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden p-2 bg-white border border-slate-100 rounded-xl text-slate-400"
+            onClick={() => {
+              if (viewMode === 'list') {
+                setViewMode('map');
+              } else {
+                setViewMode('list');
+                setSidebarOpen(true);
+              }
+            }}
+            className="lg:hidden p-2 bg-white border border-slate-100 rounded-xl text-slate-400 active:scale-95"
           >
-            {sidebarOpen ? <X size={20} /> : <Search size={20} />}
+            {viewMode === 'list' ? <X size={20} /> : <Search size={20} />}
           </button>
         </div>
       </div>
@@ -4667,7 +4827,16 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                       {activeTrips.length} Live
                     </span>
                   </div>
-                  <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400"><X size={16} /></button>
+                  <button 
+                    onClick={() => {
+                      setViewMode('map');
+                      setSidebarOpen(true);
+                    }} 
+                    className="lg:hidden p-1 text-slate-400 hover:text-slate-700 active:scale-95"
+                    title="View Map"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
@@ -4923,6 +5092,7 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                               onClick={() => {
                                 setSelectedTripId(trip.id);
                                 setSelectedVehicleId(null);
+                                setViewMode('map');
                               }}
                               className={cn(
                                 "w-full p-3 md:p-4 rounded-[1.5rem] md:rounded-3xl border transition-all text-left relative overflow-hidden group cursor-pointer",
@@ -4996,6 +5166,7 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                                 if (hasLoc) {
                                   setFocusedLocation({ lat: Number(busLoc.lat), lng: Number(busLoc.lng) });
                                 }
+                                setViewMode('map');
                               }}
                               className={cn(
                                 "w-full p-3 rounded-2xl border transition-all text-left relative overflow-hidden group cursor-pointer",
@@ -5035,7 +5206,7 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
         {/* Right - Map View */}
         <div className={cn(
           "flex-1 bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden relative lg:h-full min-h-[420px] order-1 lg:order-2",
-          viewMode === 'map' ? "block h-[500px] md:h-[620px] lg:h-full" : "hidden lg:block h-[500px] md:h-[620px] lg:h-full"
+          viewMode === 'map' ? "block h-[calc(100vh-230px)] min-h-[460px] lg:h-full" : "hidden lg:block h-[500px] md:h-[620px] lg:h-full"
         )}>
           <MapComponent 
             key={viewMode}
@@ -5263,21 +5434,9 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
             })}
           </MapComponent>
           {activeTrips.length === 0 && (
-            <div className="absolute inset-0 z-[900] flex items-center justify-center pointer-events-none p-5">
-              <div className="max-w-xs rounded-3xl border border-white/80 bg-white/92 px-6 py-5 text-center shadow-2xl backdrop-blur-md">
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
-                  <Bus size={24} />
-                </div>
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-800">No active fleets</p>
-                <p className="mt-2 text-[10px] font-bold leading-relaxed text-slate-500">
-                  The live map is ready. Fleet locations will appear here when a driver starts a trip.
-                </p>
-                {allVehicles.length > 0 && (
-                  <p className="mt-3 text-[9px] font-black uppercase tracking-widest text-slate-400">
-                    {allVehicles.length} registered {allVehicles.length === 1 ? 'vehicle' : 'vehicles'} on standby
-                  </p>
-                )}
-              </div>
+            <div className="absolute top-4 left-4 z-[900] pointer-events-none bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-200/80 shadow-sm flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-slate-400" />
+              <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider">Map Ready • 0 Live Shifts</span>
             </div>
           )}
 
