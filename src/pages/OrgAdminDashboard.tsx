@@ -4208,7 +4208,7 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
     });
   }, [activeTrips, searchQuery, allVehicles, allRoutes, drivers]);
 
-  // Track all registered fleet vehicles not currently on an active trip
+  // Track registered fleet vehicles that are ASSIGNED (to a route or driver) and not currently on an active trip
   const standbyVehicles = useMemo(() => {
     const activeVehicleIds = new Set(activeTrips.map(t => String(t.vehicleId)));
     const q = searchQuery.toLowerCase().trim();
@@ -4216,26 +4216,19 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
     return allVehicles
       .filter((v: any) => !activeVehicleIds.has(String(v.id)))
       .filter((v: any) => {
+        // Only show ASSIGNED fleet vehicles (must have an assigned driver or assigned route)
+        const driver = drivers.find((d: any) => String(d.uid) === String(v.driverId) || String(d.id) === String(v.driverId) || String(d.vehicleId) === String(v.id));
+        const route = allRoutes.find((r: any) => String(r.id) === String(v.routeId) || String(r.vehicleId) === String(v.id));
+        const isAssigned = !!(v.driverId || v.routeId || driver || route);
+        if (!isAssigned) return false;
+
         if (!q) return true;
-        const driver = drivers.find((d: any) => String(d.uid) === String(v.driverId) || String(d.id) === String(v.driverId));
-        const route = allRoutes.find((r: any) => String(r.id) === String(v.routeId));
         return (v.plateNumber?.toLowerCase().includes(q) ||
                 driver?.name?.toLowerCase().includes(q) ||
                 driver?.mobile?.toLowerCase().includes(q) ||
                 route?.name?.toLowerCase().includes(q));
       });
   }, [allVehicles, activeTrips, drivers, allRoutes, searchQuery]);
-
-  const availableDrivers = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return drivers.filter((d: any) => {
-      if (!d) return false;
-      if (!q) return true;
-      const nameMatch = d.name?.toLowerCase().includes(q) || false;
-      const phoneMatch = (d.phone || d.mobile)?.toLowerCase().includes(q) || false;
-      return nameMatch || phoneMatch;
-    });
-  }, [drivers, searchQuery]);
 
   const selectedTripRaw = activeTrips.find(t => t.id === selectedTripId);
   const selectedTrip = useMemo(() => {
@@ -4902,7 +4895,10 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                   <div className="py-10 md:py-20 text-center opacity-40">
                     <Bus className="w-10 h-10 md:w-12 md:h-12 text-slate-200 mx-auto mb-3" />
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                      {searchQuery.trim() ? "No matching fleet buses" : "No Registered Fleet Buses"}
+                      {searchQuery.trim() ? "No matching fleet buses" : "No Assigned Fleet Buses"}
+                    </p>
+                    <p className="text-[8px] font-bold text-slate-400 mt-1">
+                      Assign vehicles to routes or drivers to track them here
                     </p>
                   </div>
                 ) : (
@@ -4970,7 +4966,7 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                       </div>
                     )}
 
-                    {/* Standby / Other Fleet Vehicles Section */}
+                    {/* Standby / Other Fleet Vehicles Section (Only Assigned) */}
                     {standbyVehicles.length > 0 && (
                       <div className="space-y-2 pt-2 border-t border-slate-100">
                         <div className="flex items-center justify-between px-1">
@@ -4985,8 +4981,8 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                           </span>
                         </div>
                         {standbyVehicles.map((vehicle: any) => {
-                          const driver = drivers.find((d: any) => String(d.uid) === String(vehicle.driverId) || String(d.id) === String(vehicle.driverId));
-                          const route = allRoutes.find((r: any) => String(r.id) === String(vehicle.routeId));
+                          const driver = drivers.find((d: any) => String(d.uid) === String(vehicle.driverId) || String(d.id) === String(vehicle.driverId) || String(d.vehicleId) === String(vehicle.id));
+                          const route = allRoutes.find((r: any) => String(r.id) === String(vehicle.routeId) || String(r.vehicleId) === String(vehicle.id));
                           const isSelected = selectedVehicleId === vehicle.id;
                           const busLoc = vehicle.location || (driver?.location);
                           const hasLoc = busLoc && isValidCoordinate(busLoc.lat, busLoc.lng);
@@ -5014,63 +5010,16 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                                   Standby
                                 </span>
                               </div>
-                              <p className={cn("text-[8px] font-bold uppercase truncate", isSelected ? "text-slate-400" : "text-slate-400")}>
-                                {route?.name ? `Route: ${route.name}` : (driver?.name ? `Driver: ${driver.name}` : 'Unassigned')}
+                              <p className={cn("text-[8px] font-bold uppercase truncate", isSelected ? "text-slate-400" : "text-slate-500")}>
+                                {route?.name && driver?.name
+                                  ? `Route: ${route.name} • ${driver.name}`
+                                  : route?.name
+                                    ? `Route: ${route.name}`
+                                    : driver?.name
+                                      ? `Driver: ${driver.name}`
+                                      : 'Assigned Fleet'}
                               </p>
                               {isSelected && <div className="absolute right-0 top-0 bottom-0 w-1 bg-slate-400" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Drivers Section */}
-                    {availableDrivers.length > 0 && (
-                      <div className="space-y-2 pt-2 border-t border-slate-100">
-                        <div className="flex items-center gap-2 px-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Drivers ({availableDrivers.length})</span>
-                        </div>
-                        {availableDrivers.map((driver: any) => {
-                          const isSelected = selectedDriverId === String(driver.uid || driver.id);
-                          const dLoc = driver.location || (isValidCoordinate(driver.latitude, driver.longitude) ? { lat: Number(driver.latitude), lng: Number(driver.longitude) } : null);
-                          const hasLoc = dLoc && isValidCoordinate(dLoc.lat, dLoc.lng);
-                          const assignedV = allVehicles.find((v: any) => String(v.driverId) === String(driver.uid || driver.id));
-                          const isOnTrip = activeTrips.some(t => String(t.driverId) === String(driver.uid || driver.id));
-
-                          return (
-                            <button
-                              key={`driver-entry-${driver.uid || driver.id}`}
-                              onClick={() => {
-                                setSelectedDriverId(String(driver.uid || driver.id));
-                                setSelectedTripId(null);
-                                setSelectedVehicleId(null);
-                                if (hasLoc) {
-                                  setFocusedLocation({ lat: Number(dLoc.lat), lng: Number(dLoc.lng) });
-                                }
-                              }}
-                              className={cn(
-                                "w-full p-3 rounded-2xl border transition-all text-left relative overflow-hidden group cursor-pointer",
-                                isSelected ? "bg-indigo-950 border-indigo-900 shadow-md text-white" : "bg-white border-slate-100 hover:bg-slate-50"
-                              )}
-                            >
-                              <div className="flex justify-between items-center mb-1">
-                                <span className={cn("text-xs font-black uppercase leading-none", isSelected ? "text-white" : "text-slate-800")}>
-                                  {driver.name || 'Driver'}
-                                </span>
-                                <span className={cn(
-                                  "px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-wider",
-                                  isOnTrip 
-                                    ? "bg-emerald-50 text-emerald-600 border border-emerald-100 animate-pulse" 
-                                    : "bg-slate-100 text-slate-500 border border-slate-200"
-                                )}>
-                                  {isOnTrip ? "Live On Trip" : "Standby"}
-                                </span>
-                              </div>
-                              <p className={cn("text-[8px] font-bold uppercase truncate", isSelected ? "text-indigo-200" : "text-slate-400")}>
-                                {assignedV ? `Bus: ${assignedV.plateNumber || assignedV.id}` : (driver.phone || driver.mobile || 'Driver Account')}
-                              </p>
-                              {isSelected && <div className="absolute right-0 top-0 bottom-0 w-1 bg-indigo-500" />}
                             </button>
                           );
                         })}
@@ -5194,74 +5143,40 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
               );
             })}
 
-            {/* Standby / Other Fleet Vehicles with Known Location */}
-            {allVehicles
-              .filter((v: any) => !activeTrips.some(t => String(t.vehicleId) === String(v.id)))
-              .map((vehicle: any) => {
-                const driver = drivers.find((d: any) => String(d.uid) === String(vehicle.driverId) || String(d.id) === String(vehicle.driverId));
-                const busLoc = vehicle.location || (driver?.location);
-                if (!busLoc || !isValidCoordinate(busLoc.lat, busLoc.lng)) return null;
-                const isSelected = selectedVehicleId === vehicle.id;
+            {/* Standby Fleet Vehicles with Known Location (Only Assigned) */}
+            {standbyVehicles.map((vehicle: any) => {
+              const driver = drivers.find((d: any) => String(d.uid) === String(vehicle.driverId) || String(d.id) === String(vehicle.driverId) || String(d.vehicleId) === String(vehicle.id));
+              const route = allRoutes.find((r: any) => String(r.id) === String(vehicle.routeId) || String(r.vehicleId) === String(vehicle.id));
+              const busLoc = vehicle.location || (driver?.location);
+              if (!busLoc || !isValidCoordinate(busLoc.lat, busLoc.lng)) return null;
+              const isSelected = selectedVehicleId === vehicle.id;
 
-                return (
-                  <Marker
-                    key={`standby-marker-${vehicle.id}`}
-                    position={[Number(busLoc.lat), Number(busLoc.lng)]}
-                    icon={createMarkerIcon(isSelected ? '#64748b' : '#94a3b8', 'https://img.icons8.com/fluency/50/bus.png', isSelected ? '#64748b' : '#94a3b8', vehicle.plateNumber || 'STANDBY BUS')}
-                    eventHandlers={{ click: () => { setSelectedVehicleId(vehicle.id); setSelectedTripId(null); setSelectedDriverId(null); } }}
-                  >
-                    <Popup>
-                      <div className="p-2 min-w-[160px]">
-                        <p className="text-xs font-black text-slate-900 border-b border-slate-100 pb-1 mb-1">{vehicle.plateNumber || 'Fleet Vehicle'}</p>
-                        <div className="space-y-1 my-2 text-[8px] font-bold uppercase tracking-widest text-slate-500">
-                          <p className="flex justify-between"><span>Status:</span> <span className="text-slate-600 font-black">Standby (Trip Not Started)</span></p>
-                          {driver && (
-                            <>
-                              <p className="flex justify-between"><span>Driver:</span> <span className="text-slate-900">{driver.name}</span></p>
-                              <p className="flex justify-between"><span>Phone:</span> <span className="text-slate-900">{driver.phone || driver.mobile || 'N/A'}</span></p>
-                            </>
-                          )}
-                        </div>
-                        <button onClick={() => { setSelectedVehicleId(vehicle.id); setSelectedTripId(null); setSelectedDriverId(null); }} className="mt-2 w-full py-1.5 bg-slate-700 text-white rounded-lg text-[8px] font-black uppercase tracking-widest active:scale-95 transition-all">Inspect Vehicle</button>
+              return (
+                <Marker
+                  key={`standby-marker-${vehicle.id}`}
+                  position={[Number(busLoc.lat), Number(busLoc.lng)]}
+                  icon={createMarkerIcon(isSelected ? '#64748b' : '#94a3b8', 'https://img.icons8.com/fluency/50/bus.png', isSelected ? '#64748b' : '#94a3b8', vehicle.plateNumber || 'STANDBY BUS')}
+                  eventHandlers={{ click: () => { setSelectedVehicleId(vehicle.id); setSelectedTripId(null); setSelectedDriverId(null); } }}
+                >
+                  <Popup>
+                    <div className="p-2 min-w-[160px]">
+                      <p className="text-xs font-black text-slate-900 border-b border-slate-100 pb-1 mb-1">{vehicle.plateNumber || 'Fleet Vehicle'}</p>
+                      <div className="space-y-1 my-2 text-[8px] font-bold uppercase tracking-widest text-slate-500">
+                        <p className="flex justify-between"><span>Status:</span> <span className="text-slate-600 font-black">Standby (Trip Not Started)</span></p>
+                        {route && <p className="flex justify-between"><span>Route:</span> <span className="text-slate-900 font-bold">{route.name}</span></p>}
+                        {driver && (
+                          <>
+                            <p className="flex justify-between"><span>Driver:</span> <span className="text-slate-900">{driver.name}</span></p>
+                            <p className="flex justify-between"><span>Phone:</span> <span className="text-slate-900">{driver.phone || driver.mobile || 'N/A'}</span></p>
+                          </>
+                        )}
                       </div>
-                    </Popup>
-                  </Marker>
-                );
+                      <button onClick={() => { setSelectedVehicleId(vehicle.id); setSelectedTripId(null); setSelectedDriverId(null); }} className="mt-2 w-full py-1.5 bg-slate-700 text-white rounded-lg text-[8px] font-black uppercase tracking-widest active:scale-95 transition-all">Inspect Vehicle</button>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
             })}
-
-            {/* Drivers with Active Location */}
-            {drivers
-              .filter((d: any) => {
-                const dId = String(d.uid || d.id);
-                const hasTrip = activeTrips.some(t => String(t.driverId) === dId);
-                const hasVehicle = allVehicles.some(v => String(v.driverId) === dId && v.location);
-                return !hasTrip && !hasVehicle;
-              })
-              .map((driver: any) => {
-                const dLoc = driver.location || (isValidCoordinate(driver.latitude, driver.longitude) ? { lat: Number(driver.latitude), lng: Number(driver.longitude) } : null);
-                if (!dLoc || !isValidCoordinate(dLoc.lat, dLoc.lng)) return null;
-                const isSelected = selectedDriverId === String(driver.uid || driver.id);
-
-                return (
-                  <Marker
-                    key={`live-driver-${driver.uid || driver.id}`}
-                    position={[Number(dLoc.lat), Number(dLoc.lng)]}
-                    icon={createMarkerIcon(isSelected ? '#6366f1' : '#8b5cf6', 'https://img.icons8.com/fluency/50/driver.png', isSelected ? '#6366f1' : '#8b5cf6', driver.name || 'DRIVER')}
-                    eventHandlers={{ click: () => { setSelectedDriverId(String(driver.uid || driver.id)); setSelectedVehicleId(null); setSelectedTripId(null); } }}
-                  >
-                    <Popup>
-                      <div className="p-2 min-w-[160px]">
-                        <p className="text-xs font-black text-slate-900 border-b border-slate-100 pb-1 mb-1">{driver.name || 'Driver'}</p>
-                        <div className="space-y-1 my-2 text-[8px] font-bold uppercase tracking-widest text-slate-500">
-                          <p className="flex justify-between"><span>Status:</span> <span className="text-indigo-600 font-black">Active Driver</span></p>
-                          <p className="flex justify-between"><span>Phone:</span> <span className="text-slate-900">{driver.phone || driver.mobile || 'N/A'}</span></p>
-                        </div>
-                        <button onClick={() => { setSelectedDriverId(String(driver.uid || driver.id)); setSelectedVehicleId(null); setSelectedTripId(null); }} className="mt-2 w-full py-1.5 bg-indigo-600 text-white rounded-lg text-[8px] font-black uppercase tracking-widest active:scale-95 transition-all">Track Driver</button>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
 
             {/* Full Static Route Polyline (Thin / Gray / Dashed) */}
             {selectedTrip && selectedRoute?.pickupPoints && selectedRoute.pickupPoints.length > 0 && (
