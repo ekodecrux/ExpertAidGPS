@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Users, Route, Bus, LogOut, Settings, Bell, Map as MapIcon, ShieldCheck, Briefcase, ChevronLeft, ChevronRight, ChevronDown, UserCircle, Users2, MapPin, Building2, School, GraduationCap, Navigation, Activity, X, Edit2, Save, Key, Mail, Shield } from 'lucide-react';
+import { LayoutDashboard, Users, Route, Bus, LogOut, Settings, Bell, Map as MapIcon, ShieldCheck, Briefcase, ChevronLeft, ChevronRight, ChevronDown, UserCircle, Users2, MapPin, Building2, School, GraduationCap, Navigation, Activity, X, Edit2, Save, Key, Mail, Shield, Camera, Copy, Check } from 'lucide-react';
 import ExpertGpsLogo from './ExpertGpsLogo';
 import { cn, getLocalAvatar, getUserAvatar, getLocalIcon } from '../lib/utils';
 import { Link, useLocation } from 'react-router-dom';
@@ -759,31 +759,39 @@ export default function AppShell({ children }: ShellProps) {
 
         <AnimatePresence>
           {isProfileOpen && (
-            <div className="fixed inset-0 z-[10100] flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[10100] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 overscroll-contain overflow-hidden">
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsProfileOpen(false)}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
               />
               <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+                initial={{ opacity: 0, y: 50, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 50, scale: 0.96 }}
+                transition={{ type: "spring", damping: 28, stiffness: 320 }}
+                className="relative w-full max-w-md bg-white rounded-t-[2.25rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh] sm:max-h-[88vh] border border-slate-100/80 my-0 sm:my-auto"
               >
-                {/* Header */}
-                <div className="p-8 bg-slate-900 text-white relative">
+                {/* Header (Pinned) */}
+                <div className="p-5 sm:p-7 bg-slate-900 text-white shrink-0 relative">
+                  {/* Mobile Drag Indicator Handle */}
+                  <div className="sm:hidden w-10 h-1 bg-white/25 rounded-full mx-auto mb-3" />
+                  
+                  {/* Close Button */}
                   <button 
                     onClick={() => setIsProfileOpen(false)}
-                    className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all"
+                    className="absolute top-4 right-4 sm:top-6 sm:right-6 w-9 h-9 sm:w-10 sm:h-10 bg-white/10 hover:bg-white/20 active:scale-90 rounded-full sm:rounded-xl text-white flex items-center justify-center transition-all cursor-pointer"
+                    title="Close Profile"
                   >
-                    <X size={20} />
+                    <X size={18} />
                   </button>
-                  <div className="flex items-center gap-4">
-                    <div className="relative group p-0.5 bg-white rounded-2xl border border-white/25 shadow-xl">
-                      <div className="w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center bg-white p-1">
+
+                  <div className="flex items-center gap-3.5 sm:gap-4 pr-10">
+                    {/* Avatar with Touch-Friendly Camera Upload */}
+                    <div className="relative shrink-0 p-0.5 bg-white rounded-2xl border border-white/25 shadow-xl">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden flex items-center justify-center bg-white p-1">
                         <img 
                           key={`modal-profile-logo-${org?.id || ''}-${org?.logoUrl || org?.logo || ''}`}
                           src={displayLogo} 
@@ -794,8 +802,13 @@ export default function AppShell({ children }: ShellProps) {
                           }}
                         />
                       </div>
-                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-all rounded-[14px] cursor-pointer">
-                        <Edit2 size={16} className="text-white" />
+                      
+                      {/* Touch & Click File Input */}
+                      <label 
+                        className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md ring-2 ring-slate-900 cursor-pointer active:scale-90 hover:bg-blue-500 transition-all"
+                        title="Upload photo / logo"
+                      >
+                        <Camera size={12} />
                         <input 
                           type="file" 
                           accept="image/*" 
@@ -811,72 +824,78 @@ export default function AppShell({ children }: ShellProps) {
                             }
 
                             const reader = new FileReader();
-                              reader.onload = async (event) => {
-                                const base64 = event.target?.result as string;
-                                setIsSaving(true);
-                                try {
-                                  // Update Firestore user
-                                  await updateDoc(doc(db, 'users', userData!.uid), {
-                                    avatarUrl: base64,
-                                    updatedAt: serverTimestamp()
-                                  });
+                            reader.onload = async (event) => {
+                              const base64 = event.target?.result as string;
+                              setIsSaving(true);
+                              try {
+                                // Update Firestore user
+                                await updateDoc(doc(db, 'users', userData!.uid), {
+                                  avatarUrl: base64,
+                                  updatedAt: serverTimestamp()
+                                });
 
-                                  // If client admin, also update organization logo dynamically
-                                  if (userData?.orgId) {
-                                    try {
-                                      await saveMySQLRecord('update', 'organizations', userData.orgId, {
-                                        logo: base64,
-                                        logoUrl: base64
-                                      });
-                                      await setDoc(doc(db, 'organizations', userData.orgId), {
-                                        logo: base64,
-                                        logoUrl: base64
-                                      }, { merge: true });
-                                      setOrg((prev: any) => prev ? { ...prev, logo: base64, logoUrl: base64 } : prev);
-                                    } catch (_) {}
-                                  }
-
-                                  toast.success('Logo updated successfully');
-                                } catch (e) {
-                                  console.error("Photo update error:", e);
-                                  toast.error('Failed to update logo');
-                                } finally {
-                                  setIsSaving(false);
+                                // If client admin, also update organization logo dynamically
+                                if (userData?.orgId) {
+                                  try {
+                                    await saveMySQLRecord('update', 'organizations', userData.orgId, {
+                                      logo: base64,
+                                      logoUrl: base64
+                                    });
+                                    await setDoc(doc(db, 'organizations', userData.orgId), {
+                                      logo: base64,
+                                      logoUrl: base64
+                                    }, { merge: true });
+                                    setOrg((prev: any) => prev ? { ...prev, logo: base64, logoUrl: base64 } : prev);
+                                  } catch (_) {}
                                 }
-                              };
+
+                                toast.success('Logo updated successfully');
+                              } catch (e) {
+                                console.error("Photo update error:", e);
+                                toast.error('Failed to update logo');
+                              } finally {
+                                setIsSaving(false);
+                              }
+                            };
                             reader.readAsDataURL(file);
                           }}
                         />
                       </label>
+
                       {isSaving && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px] rounded-xl">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px] rounded-xl">
                           <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         </div>
                       )}
                     </div>
-                    <div>
-                      <h3 className="text-xl font-black uppercase italic tracking-tight">
+
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-base sm:text-lg font-black uppercase italic tracking-tight truncate leading-tight">
                         {(!userData?.name || userData.name.toUpperCase() === 'ANONYMOUS') 
                           ? (userData?.role === 'super_admin' ? 'Super Admin' : 'Administrator') 
                           : userData.name}
                       </h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="px-2 py-0.5 bg-blue-500 rounded text-[9px] font-black uppercase tracking-widest text-white shadow-sm shadow-blue-500/50">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        <span className="px-2 py-0.5 bg-blue-500 rounded text-[9px] font-black uppercase tracking-widest text-white shadow-xs">
                           {userData?.role?.replace('_', ' ')}
                         </span>
-                        {org && userData?.name?.toLowerCase() !== org.name?.toLowerCase() && <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{org.name}</span>}
+                        {org && userData?.name?.toLowerCase() !== org.name?.toLowerCase() && (
+                          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest truncate max-w-[150px]">
+                            {org.name}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Body */}
-                <div className="p-8 space-y-6">
+                {/* Body (Scrollable across all screens) */}
+                <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-5 custom-scrollbar overscroll-contain">
                   {/* Name field */}
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between px-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                        <UserCircle size={12} className="text-blue-500" />
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-1.5">
+                        <UserCircle size={13} className="text-blue-500" />
                         Full Identity
                       </label>
                     </div>
@@ -887,27 +906,29 @@ export default function AppShell({ children }: ShellProps) {
                         onChange={(e) => setNewName(e.target.value)}
                         disabled={!isEditingProfile || isSaving}
                         className={cn(
-                          "w-full px-5 py-3 rounded-2xl text-sm font-bold transition-all outline-none border",
+                          "w-full px-4 py-3 rounded-2xl text-sm font-bold transition-all outline-none border",
                           isEditingProfile 
-                            ? "bg-white border-blue-200 ring-8 ring-blue-500/5 focus:border-blue-500 pr-24" 
-                            : "bg-slate-50 border-transparent text-slate-500 cursor-not-allowed pr-12"
+                            ? "bg-white border-blue-400 ring-4 ring-blue-500/10 focus:border-blue-500 pr-24" 
+                            : "bg-slate-50 border-slate-100 text-slate-700 pr-12"
                         )}
                       />
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
                         {isEditingProfile ? (
                           <>
                             <button
+                              type="button"
                               onClick={() => {
                                 setNewName(userData?.name || '');
                                 setIsEditingProfile(false);
                               }}
                               disabled={isSaving}
-                              className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all active:scale-95 disabled:opacity-50"
+                              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all active:scale-95 disabled:opacity-50"
                               title="Cancel"
                             >
                               <X size={14} />
                             </button>
                             <button
+                              type="button"
                               onClick={async () => {
                                 if (isSaving) return;
                                 
@@ -929,7 +950,7 @@ export default function AppShell({ children }: ShellProps) {
                                     await updateProfile(firebaseAuth.currentUser, { displayName: newName.trim() });
                                   }
 
-                                  toast.success(`Identity recognized: ${newName.trim()}`);
+                                  toast.success(`Identity updated: ${newName.trim()}`);
                                   setIsEditingProfile(false);
                                 } catch (e: any) {
                                   console.error("Update error:", e);
@@ -939,7 +960,7 @@ export default function AppShell({ children }: ShellProps) {
                                 }
                               }}
                               disabled={isSaving}
-                              className="p-1.5 rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/30 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50"
+                              className="p-2 rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/30 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50"
                               title="Save"
                             >
                               {isSaving ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={14} />}
@@ -947,8 +968,9 @@ export default function AppShell({ children }: ShellProps) {
                           </>
                         ) : (
                           <button
+                            type="button"
                             onClick={() => setIsEditingProfile(true)}
-                            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all active:scale-95 hover:text-blue-600"
+                            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all active:scale-95 hover:text-blue-600"
                             title="Edit Name"
                           >
                             <Edit2 size={14} />
@@ -959,20 +981,43 @@ export default function AppShell({ children }: ShellProps) {
                   </div>
 
                   {/* Email display */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
-                      <Mail size={12} className="text-slate-400" />
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1 flex items-center gap-1.5">
+                      <Mail size={13} className="text-slate-400" />
                       Contact Email
                     </label>
-                    <div className="px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-400 italic">
+                    <div className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs sm:text-sm font-bold text-slate-600 truncate select-all">
                       {userData?.email}
                     </div>
                   </div>
 
+                  {/* Organization info card if applicable */}
+                  {org && (
+                    <div className="p-4 bg-slate-50/70 border border-slate-100 rounded-2xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Organization</span>
+                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-wide truncate max-w-[180px]">{org.name}</span>
+                      </div>
+                      {org.sector && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sector</span>
+                          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">{org.sector}</span>
+                        </div>
+                      )}
+                      {userData?.orgId && (
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/50">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Org ID</span>
+                          <span className="text-[10px] font-mono font-bold text-slate-500">{userData.orgId}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Security section */}
-                  <div className="pt-4 border-t border-slate-100 space-y-4">
-                    <p className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] px-1 italic">Security Measures</p>
+                  <div className="pt-2 border-t border-slate-100 space-y-3">
+                    <p className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] px-1 italic">Security & Credentials</p>
                     <button 
+                      type="button"
                       onClick={async () => {
                         if (!userData?.email || isResettingPassword) return;
                         setIsResettingPassword(true);
@@ -993,28 +1038,42 @@ export default function AppShell({ children }: ShellProps) {
                         }
                       }}
                       disabled={isResettingPassword}
-                      className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-3xl group transition-all disabled:opacity-50"
+                      className="w-full flex items-center justify-between p-3.5 sm:p-4 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-2xl group transition-all disabled:opacity-50 active:scale-98"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-slate-400 group-hover:text-blue-600 shadow-sm transition-all">
-                          {isResettingPassword ? <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" /> : <Key size={18} />}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white flex items-center justify-center text-slate-500 group-hover:text-blue-600 shadow-sm shrink-0 transition-colors">
+                          {isResettingPassword ? <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" /> : <Key size={16} />}
                         </div>
-                        <div className="text-left">
-                          <p className="text-xs font-black text-slate-900 uppercase italic leading-none">Reset Access Code</p>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Change your password via email</p>
+                        <div className="text-left min-w-0">
+                          <p className="text-xs font-black text-slate-900 uppercase italic leading-none truncate">Reset Access Code</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate">Change your password via email</p>
                         </div>
                       </div>
-                      <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-900" />
+                      <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-900 shrink-0 ml-2" />
                     </button>
                   </div>
                 </div>
 
-                <div className="px-8 pb-8">
+                {/* Footer (Pinned Action Bar) */}
+                <div className="p-4 sm:p-5 bg-slate-50/90 backdrop-blur-md border-t border-slate-100 shrink-0 flex items-center gap-2.5 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] sm:pb-5">
                   <button 
+                    type="button"
                     onClick={() => setIsProfileOpen(false)}
-                    className="w-full py-4 bg-slate-900 text-white rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all active:scale-95"
+                    className="flex-1 py-3.5 sm:py-4 bg-slate-900 text-white rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] shadow-md hover:bg-blue-600 transition-all active:scale-95 cursor-pointer text-center"
                   >
                     Close Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileOpen(false);
+                      logout();
+                    }}
+                    className="px-4 py-3.5 sm:py-4 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-wider border border-rose-100 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    title="Sign out of account"
+                  >
+                    <LogOut size={14} />
+                    <span className="hidden xs:inline">Log out</span>
                   </button>
                 </div>
               </motion.div>

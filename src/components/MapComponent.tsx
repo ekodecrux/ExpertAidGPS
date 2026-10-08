@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import 'leaflet/dist/leaflet.css';
 import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Polyline } from 'react-leaflet';
 import L from 'leaflet';
@@ -236,6 +237,7 @@ interface MapComponentProps {
   onClick?: (lat: number, lng: number) => void;
   driverCoords?: { lat: number; lng: number } | null;
   targetStopCoords?: { lat: number; lng: number } | null;
+  trigger?: any;
 }
 
 function MapReadyTrigger({ 
@@ -365,6 +367,7 @@ function ChangeView({
           lastZoomRef.current = targetZoom;
           try {
             map.setView([lat, lng], targetZoom);
+            map.invalidateSize({ pan: false });
           } catch (err) {
             console.warn('setView failed gracefully:', err);
           }
@@ -401,14 +404,14 @@ export const isNightTime = (): boolean => {
   return isNightHour || prefersDark;
 };
 
-// High-resolution Google Maps tile layers providing all street details, building outlines,
-// landmarks, transit stops, and POIs exactly matching standard Google Maps.
+// Production-grade resilient map tile layers: High-speed Google Maps raster tiles,
+// Esri ArcGIS photography and canvases, and OpenStreetMap. Zero API key required, zero watermarks.
 export const MAP_LAYERS = {
   standard: {
-    name: 'Google Streets',
+    name: 'Navigation Streets',
     tag: 'Standard Road Map',
     icon: '🗺️',
-    desc: 'Google Maps street layout with landmarks, building footprints, house numbers, and POIs',
+    desc: 'High-detail clear street navigation with roads, building footprints, house numbers, and landmarks',
     url: 'https://mt{s}.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}',
     attribution: '&copy; Google Maps',
     subdomains: ['0', '1', '2', '3'],
@@ -416,10 +419,10 @@ export const MAP_LAYERS = {
     maxNativeZoom: 20
   },
   satellite: {
-    name: 'Google Satellite',
+    name: 'Satellite View',
     tag: 'Satellite & Roads',
     icon: '🛰️',
-    desc: 'High-resolution Google aerial satellite photography with street overlays and labels',
+    desc: 'High-resolution aerial satellite photography with geographic features and roads',
     url: 'https://mt{s}.google.com/vt/lyrs=y&hl=en&x={x}&y={y}&z={z}',
     attribution: '&copy; Google Maps',
     subdomains: ['0', '1', '2', '3'],
@@ -427,10 +430,10 @@ export const MAP_LAYERS = {
     maxNativeZoom: 20
   },
   traffic: {
-    name: 'Live Traffic',
+    name: 'Live Traffic & Roads',
     tag: 'Real-time Traffic',
     icon: '🚦',
-    desc: 'Google Maps real-time traffic flow indicators, delays, and transit routes',
+    desc: 'Detailed real-time transit and highway map with traffic flow routing and streets',
     url: 'https://mt{s}.google.com/vt/lyrs=m,traffic&hl=en&x={x}&y={y}&z={z}',
     attribution: '&copy; Google Maps',
     subdomains: ['0', '1', '2', '3'],
@@ -438,48 +441,48 @@ export const MAP_LAYERS = {
     maxNativeZoom: 20
   },
   terrain: {
-    name: 'Google Terrain',
+    name: 'Topographic Relief',
     tag: 'Elevation & Relief',
     icon: '⛰️',
-    desc: 'Google Maps topographic relief, elevation contours, and landscape details',
+    desc: 'Topographic terrain relief, elevation contours, and landscape details',
     url: 'https://mt{s}.google.com/vt/lyrs=p&hl=en&x={x}&y={y}&z={z}',
     attribution: '&copy; Google Maps',
     subdomains: ['0', '1', '2', '3'],
-    maxZoom: 20,
-    maxNativeZoom: 18
+    maxZoom: 22,
+    maxNativeZoom: 20
+  },
+  osm: {
+    name: 'OpenStreetMap',
+    tag: 'OpenStreetMap Global',
+    icon: '🌍',
+    desc: 'Community-driven open street mapping with global landmarks and routing',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+    subdomains: ['a', 'b', 'c'],
+    maxZoom: 19,
+    maxNativeZoom: 19
   },
   light: {
-    name: 'Google Streets',
-    tag: 'Standard Road Map',
-    icon: '🗺️',
-    desc: 'Google Maps street layout with landmarks, building footprints, house numbers, and POIs',
-    url: 'https://mt{s}.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}',
-    attribution: '&copy; Google Maps',
-    subdomains: ['0', '1', '2', '3'],
-    maxZoom: 22,
-    maxNativeZoom: 20
+    name: 'Clean Light',
+    tag: 'Light Minimal Map',
+    icon: '☀️',
+    desc: 'Clean minimal grayscale map optimized for high-contrast fleet marker tracking',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri',
+    subdomains: [],
+    maxZoom: 19,
+    maxNativeZoom: 16
   },
   dark: {
-    name: 'Live Traffic',
-    tag: 'Real-time Traffic',
-    icon: '🚦',
-    desc: 'Google Maps real-time traffic flow indicators, delays, and transit routes',
-    url: 'https://mt{s}.google.com/vt/lyrs=m,traffic&hl=en&x={x}&y={y}&z={z}',
-    attribution: '&copy; Google Maps',
-    subdomains: ['0', '1', '2', '3'],
-    maxZoom: 22,
-    maxNativeZoom: 20
-  },
-  topo: {
-    name: 'Google Terrain',
-    tag: 'Elevation & Relief',
-    icon: '⛰️',
-    desc: 'Google Maps topographic relief, elevation contours, and landscape details',
-    url: 'https://mt{s}.google.com/vt/lyrs=p&hl=en&x={x}&y={y}&z={z}',
-    attribution: '&copy; Google Maps',
-    subdomains: ['0', '1', '2', '3'],
-    maxZoom: 20,
-    maxNativeZoom: 18
+    name: 'Night Mode',
+    tag: 'Dark High Contrast',
+    icon: '🌙',
+    desc: 'Sleek dark theme map optimized for night navigation and reduced eye strain',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri',
+    subdomains: [],
+    maxZoom: 19,
+    maxNativeZoom: 16
   }
 };
 
@@ -530,12 +533,13 @@ function CustomControls({
         duration: 0.35
       });
       safeToast.success('Centered on current location', { id: 'gps-locate', duration: 1500 });
+      setIsLocating(false);
     }
 
     // Quick auto-dismiss loading state so the button is snappy and never hangs
     const safetyTimer = setTimeout(() => {
       setIsLocating(false);
-    }, 2000);
+    }, 1200);
 
     // 2. Mobile Native App (Capacitor) High-Accuracy GPS
     if (Capacitor.isNativePlatform()) {
@@ -591,7 +595,7 @@ function CustomControls({
           }
           setIsLocating(false);
         },
-        { enableHighAccuracy: true, timeout: 3500, maximumAge: 15000 }
+        { enableHighAccuracy: true, timeout: 2000, maximumAge: 60000 }
       );
     } else {
       clearTimeout(safetyTimer);
@@ -789,11 +793,26 @@ function MapAutoResizer({ trigger }: { trigger?: any }) {
       ro.observe(container);
     }
 
-    // 4. Window & orientation listeners
+    // 4. Native IntersectionObserver to catch when container becomes visible from display:none
+    let io: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== 'undefined') {
+      io = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            forceResize();
+            setTimeout(forceResize, 40);
+            setTimeout(forceResize, 150);
+          }
+        }
+      });
+      io.observe(container);
+    }
+
+    // 5. Window & orientation listeners
     window.addEventListener('resize', forceResize, { passive: true });
     window.addEventListener('orientationchange', forceResize, { passive: true });
 
-    // 5. Short staggered timers to catch delayed CSS or font layout adjustments
+    // 6. Short staggered timers to catch delayed CSS or font layout adjustments
     const timers = [30, 80, 150, 300, 600, 1000].map((delay) =>
       setTimeout(forceResize, delay)
     );
@@ -802,6 +821,7 @@ function MapAutoResizer({ trigger }: { trigger?: any }) {
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
       if (ro) ro.disconnect();
+      if (io) io.disconnect();
       window.removeEventListener('resize', forceResize);
       window.removeEventListener('orientationchange', forceResize);
       timers.forEach(clearTimeout);
@@ -826,7 +846,8 @@ export default function MapComponent({
   onMapReady,
   onClick,
   driverCoords,
-  targetStopCoords
+  targetStopCoords,
+  trigger
 }: MapComponentProps) {
   // Clean Street Map is default
   const [mapType, setMapType] = useState<MapLayerType>('standard');
@@ -882,12 +903,14 @@ export default function MapComponent({
 
   // Derive sanitized center without keeping redundant internal state
   const sanitizedCenter = useMemo(() => {
-    let lat = typeof center?.lat === 'number' && !isNaN(center?.lat) ? center.lat : 17.4504;
-    let lng = typeof center?.lng === 'number' && !isNaN(center?.lng) ? center.lng : 78.3808;
-    if (lat < -90 || lat > 90) lat = 17.4504;
-    if (lng < -180 || lng > 180) lng = 78.3808;
+    const rawLat = center?.lat !== undefined ? center.lat : (center as any)?.latitude;
+    const rawLng = center?.lng !== undefined ? center.lng : (center as any)?.longitude;
+    let lat = typeof rawLat === 'number' ? rawLat : parseFloat(rawLat as any);
+    let lng = typeof rawLng === 'number' ? rawLng : parseFloat(rawLng as any);
+    if (isNaN(lat) || lat < -90 || lat > 90) lat = 17.4954;
+    if (isNaN(lng) || lng < -180 || lng > 180) lng = 78.2960;
     return { lat, lng };
-  }, [center?.lat, center?.lng]);
+  }, [center?.lat, center?.lng, (center as any)?.latitude, (center as any)?.longitude]);
 
   const sanitizedZoom = typeof zoom === 'number' && !isNaN(zoom) ? zoom : 12;
 
@@ -956,17 +979,20 @@ export default function MapComponent({
 
   const activeLayerConfig = MAP_LAYERS[mapType] || MAP_LAYERS.standard;
 
+  const minH = isFullscreen ? '100vh' : (height && height !== '100%' ? height : '380px');
+
   const mapElement = (
     <div 
       className={cn(
-        "rounded-2xl overflow-hidden shadow-lg border border-slate-200 relative group",
+        "rounded-2xl overflow-hidden shadow-lg border border-slate-200 relative group flex flex-col",
         isFullscreen 
           ? "fixed inset-0 z-[99999999] w-screen h-screen rounded-none border-none shadow-2xl bg-slate-950 m-0 p-0" 
           : "w-full z-0",
         className
       )} 
       style={{ 
-        height: isFullscreen ? '100vh' : height,
+        height: isFullscreen ? '100vh' : (height || '100%'),
+        minHeight: minH,
         ...(isFullscreen ? { top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', position: 'fixed', zIndex: 99999999 } : {})
       }}
     >
@@ -978,9 +1004,9 @@ export default function MapComponent({
         scrollWheelZoom={true}
         zoomControl={false}
         attributionControl={false}
-        style={{ width: '100%', height: '100%' }}
+        style={{ width: '100%', height: '100%', minHeight: minH, flex: 1 }}
         className={cn(
-          "w-full h-full",
+          "w-full h-full flex-1",
           mapType === 'satellite' ? "satellite-mode" : ""
         )}
       >
@@ -989,25 +1015,28 @@ export default function MapComponent({
           key={`${mapType}-${activeLayerConfig.url}`}
           attribution={activeLayerConfig.attribution}
           url={activeLayerConfig.url}
-          subdomains={activeLayerConfig.subdomains || ['0', '1', '2', '3']}
-          maxZoom={21}
-          maxNativeZoom={activeLayerConfig.maxNativeZoom || 20}
+          subdomains={activeLayerConfig.subdomains && activeLayerConfig.subdomains.length > 0 ? activeLayerConfig.subdomains : ['a', 'b', 'c', 'd']}
+          maxZoom={22}
+          maxNativeZoom={activeLayerConfig.maxNativeZoom || 19}
           eventHandlers={{
             tileerror: (error: any) => {
               const img = error?.tile;
-              if (img && img.dataset && !img.dataset.fallbackTried) {
-                img.dataset.fallbackTried = 'true';
-                const coords = error?.coords;
-                if (coords) {
-                  img.src = `https://mt2.google.com/vt/lyrs=m&hl=en&x=${coords.x}&y=${coords.y}&z=${coords.z}`;
-                }
+              if (img && !img.dataset?.fallbackTried) {
+                try {
+                  img.dataset = img.dataset || {};
+                  img.dataset.fallbackTried = 'true';
+                  const coords = error?.coords;
+                  if (coords) {
+                    img.src = `https://tile.openstreetmap.org/${coords.z}/${coords.x}/${coords.y}.png`;
+                  }
+                } catch (e) {}
               }
             }
           }}
         />
 
         <ChangeView center={sanitizedCenter} zoom={sanitizedZoom} bounds={bounds} />
-        <MapAutoResizer trigger={isFullscreen ? 'fullscreen' : height} />
+        <MapAutoResizer trigger={trigger !== undefined ? trigger : (isFullscreen ? 'fullscreen' : height)} />
         <MobileScrollHelper isFullscreen={isFullscreen} />
 
         {!hideControls && (

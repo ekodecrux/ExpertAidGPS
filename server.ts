@@ -482,7 +482,12 @@ async function start() {
           number VARCHAR(255),
           type VARCHAR(255),
           capacity INT,
-          status VARCHAR(100)
+          status VARCHAR(100),
+          driverId VARCHAR(255) NULL,
+          routeId VARCHAR(255) NULL,
+          latitude DOUBLE NULL,
+          longitude DOUBLE NULL,
+          lastUpdated VARCHAR(100) NULL
         );
       `);
       await connection.query(`
@@ -521,6 +526,8 @@ async function start() {
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS latitude DOUBLE NULL",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS longitude DOUBLE NULL",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS lastUpdated VARCHAR(100) NULL",
+        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS driverId VARCHAR(255) NULL",
+        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS routeId VARCHAR(255) NULL",
         "ALTER TABLE trips ADD COLUMN IF NOT EXISTS currentLat DOUBLE NULL",
         "ALTER TABLE trips ADD COLUMN IF NOT EXISTS currentLng DOUBLE NULL",
         "ALTER TABLE trips ADD COLUMN IF NOT EXISTS currentStopId VARCHAR(255) NULL",
@@ -530,6 +537,8 @@ async function start() {
         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS latitude DOUBLE NULL",
         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS longitude DOUBLE NULL",
         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS eduType VARCHAR(50) NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS vehicleId VARCHAR(255) NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS routeId VARCHAR(255) NULL",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS classId VARCHAR(255) NULL",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS section VARCHAR(255) NULL",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatarUrl LONGTEXT NULL",
@@ -1809,7 +1818,7 @@ async function start() {
   app.post("/api/admin/update-user-profile", verifyAdmin, async (req, res) => {
     try {
       const admin = (req as any).user;
-      let { uid, email, name, phone, licenseNumber } = req.body;
+      let { uid, email, name, phone, licenseNumber, vehicleId, routeId } = req.body;
       if (!uid) {
         return res.status(400).json({ error: "Missing required parameter: uid" });
       }
@@ -1882,7 +1891,6 @@ async function start() {
 
       const formattedPhone = formatPhoneNumber(phone);
       if (phone !== undefined) {
-        // Only update phone in auth if format is valid and different
         if (formattedPhone) {
           updates.phoneNumber = formattedPhone;
         }
@@ -1893,23 +1901,30 @@ async function start() {
         dbUpdates.licenseNumber = licenseNumber || '';
       }
 
-      // 3. Update Firebase Auth user
+      if (vehicleId !== undefined) {
+        dbUpdates.vehicleId = vehicleId || '';
+      }
+
+      if (routeId !== undefined) {
+        dbUpdates.routeId = routeId || '';
+      }
+
+      // 3. Update Firebase Auth user (non-blocking if phone number already exists or format rejected)
       if (Object.keys(updates).length > 0) {
         try {
           await auth.updateUser(uid, updates);
         } catch (authErr: any) {
-          console.error("[update-user-profile] Auth update error:", authErr);
-          if (authErr.code === 'auth/email-already-exists') {
-            return res.status(400).json({ error: "Email already exists" });
-          }
-          if (authErr.code === 'auth/phone-number-already-exists') {
-            // If phone number already exists, save to DB but skip auth phone update
+          console.warn("[update-user-profile] Auth update notice:", authErr.message);
+          // If phone number fails, try updating without phone number
+          if (updates.phoneNumber) {
             delete updates.phoneNumber;
             if (Object.keys(updates).length > 0) {
-              await auth.updateUser(uid, updates);
+              try {
+                await auth.updateUser(uid, updates);
+              } catch (innerAuthErr: any) {
+                console.warn("[update-user-profile] Non-critical auth update warning:", innerAuthErr.message);
+              }
             }
-          } else {
-            return res.status(400).json({ error: authErr.message || "Failed to update authentication account" });
           }
         }
       }
@@ -1926,6 +1941,18 @@ async function start() {
           });
           params.push(uid);
           await conn.query(`UPDATE users SET ${sets.join(', ')} WHERE uid = ?`, params);
+
+          // If vehicleId was updated for a driver, sync the vehicles table
+          if (vehicleId !== undefined) {
+            if (vehicleId) {
+              await conn.query("UPDATE vehicles SET driverId = ? WHERE id = ?", [uid, vehicleId]);
+              // Clear previous driver's vehicle assignment if any
+              await conn.query("UPDATE users SET vehicleId = '' WHERE vehicleId = ? AND uid != ?", [vehicleId, uid]);
+            } else {
+              // Unassigned vehicle
+              await conn.query("UPDATE vehicles SET driverId = '' WHERE driverId = ?", [uid]);
+            }
+          }
         } catch (mysqlErr: any) {
           console.error("[update-user-profile] MySQL update failed:", mysqlErr.message);
         } finally {
@@ -1937,6 +1964,11 @@ async function start() {
         // 5. Update Firestore asynchronously
         try {
           await firestoreDb.collection("users").doc(uid).set(dbUpdates, { merge: true });
+          if (vehicleId !== undefined) {
+            if (vehicleId) {
+              await firestoreDb.collection("vehicles").doc(vehicleId).set({ driverId: uid }, { merge: true });
+            }
+          }
         } catch (fsErr: any) {
           console.warn("[update-user-profile] Firestore update failed:", fsErr.message);
         }
@@ -2446,10 +2478,19 @@ async function start() {
           } catch (e) {
             notificationsArr = [];
           }
+
+          // Bi-directionally resolve vehicleId if driver
+          let matchedVehicleId = u.vehicleId || "";
+          if (!matchedVehicleId && u.role === "driver") {
+            const matchedV = vehicles.find((v: any) => String(v.driverId) === String(u.uid || u.id));
+            if (matchedV) matchedVehicleId = matchedV.id;
+          }
+
           return {
             ...u,
             id: u.uid || u.id,
             uid: u.uid || u.id,
+            vehicleId: matchedVehicleId,
             notifications: notificationsArr
           };
         });
@@ -2537,8 +2578,15 @@ async function start() {
           const locObj = (v.latitude !== null && v.longitude !== null && v.latitude !== undefined && v.longitude !== undefined)
             ? { lat: Number(v.latitude), lng: Number(v.longitude) }
             : null;
+          
+          // Cross-reference driver and route
+          const assignedDriver = mappedUsers.find((u: any) => u.role === "driver" && (String(u.vehicleId) === String(v.id) || String(u.uid) === String(v.driverId)));
+          const assignedRoute = mappedRoutes.find((r: any) => String(r.id) === String(v.routeId) || (assignedDriver && String(assignedDriver.routeId) === String(r.id)));
+
           return {
             ...v,
+            driverId: v.driverId || (assignedDriver ? assignedDriver.uid : ""),
+            routeId: v.routeId || (assignedRoute ? assignedRoute.id : (assignedDriver ? assignedDriver.routeId : "")),
             plateNumber: v.plateNumber || v.number || "",
             model: v.model || v.name || "",
             yearMade: v.yearMade || v.type || "",
@@ -2823,6 +2871,16 @@ async function start() {
             mergedData.email || "", mergedData.name || "", phoneNum, mergedData.role || "", uOrgId, mergedData.routeId || "", mergedData.vehicleId || "", mergedData.pickupPointId || "", mergedData.studentId || "", uClassId, uSection, uAvatar, uNotifs, uStatus, uStatusUpdatedAt, uPickupStatus, uPickupUpdatedAt, uDropoffStatus, uDropoffUpdatedAt, uPickedAt, uDate
           ]
         );
+
+        // Bi-directionally sync vehicle assignment in vehicles table if user is driver
+        if (mergedData.vehicleId !== undefined) {
+          if (mergedData.vehicleId) {
+            await conn.query("UPDATE vehicles SET driverId = ? WHERE id = ?", [id, mergedData.vehicleId]);
+            await conn.query("UPDATE users SET vehicleId = '' WHERE vehicleId = ? AND uid != ?", [mergedData.vehicleId, id]);
+          } else {
+            await conn.query("UPDATE vehicles SET driverId = '' WHERE driverId = ?", [id]);
+          }
+        }
       } else if (table === "vehicles") {
         const busLat = mergedData.latitude !== undefined ? mergedData.latitude : (mergedData.location?.lat !== undefined ? mergedData.location.lat : null);
         const busLng = mergedData.longitude !== undefined ? mergedData.longitude : (mergedData.location?.lng !== undefined ? mergedData.location.lng : null);
@@ -2830,15 +2888,27 @@ async function start() {
         const mappedName = mergedData.model || mergedData.name || "";
         const mappedNumber = mergedData.plateNumber || mergedData.number || "";
         const mappedType = mergedData.yearMade || mergedData.type || "";
+        const mappedDriverId = mergedData.driverId !== undefined ? mergedData.driverId : "";
+        const mappedRouteId = mergedData.routeId !== undefined ? mergedData.routeId : "";
         await conn.query(
-          `INSERT INTO vehicles (id, orgId, name, number, type, capacity, status, latitude, longitude, lastUpdated) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
-           ON DUPLICATE KEY UPDATE orgId=?, name=?, number=?, type=?, capacity=?, status=?, latitude=?, longitude=?, lastUpdated=?`,
+          `INSERT INTO vehicles (id, orgId, name, number, type, capacity, status, latitude, longitude, lastUpdated, driverId, routeId) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+           ON DUPLICATE KEY UPDATE orgId=?, name=?, number=?, type=?, capacity=?, status=?, latitude=?, longitude=?, lastUpdated=?, driverId=?, routeId=?`,
           [
-            id, mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp,
-            mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp
+            id, mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp, mappedDriverId, mappedRouteId,
+            mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp, mappedDriverId, mappedRouteId
           ]
         );
+
+        // Bi-directionally sync driver in users table
+        if (mappedDriverId) {
+          await conn.query("UPDATE users SET vehicleId = ? WHERE uid = ?", [id, mappedDriverId]);
+          // Unlink other drivers previously tied to this vehicle
+          await conn.query("UPDATE users SET vehicleId = '' WHERE vehicleId = ? AND uid != ?", [id, mappedDriverId]);
+        } else if (mergedData.driverId === '') {
+          // Explicitly unassigned
+          await conn.query("UPDATE users SET vehicleId = '' WHERE vehicleId = ?", [id]);
+        }
       } else if (table === "routes") {
         const routeData = mergedData || data || {};
         const startPt = routeData.startPoint ? (typeof routeData.startPoint === "string" ? routeData.startPoint : JSON.stringify(routeData.startPoint)) : "";
@@ -3122,6 +3192,15 @@ async function start() {
                 mergedData.email || "", mergedData.name || "", phoneNum, mergedData.role || "", uOrgId, mergedData.routeId || "", mergedData.vehicleId || "", mergedData.pickupPointId || "", mergedData.studentId || "", uClassId, uSection, uAvatar, uNotifs, uStatus, uStatusUpdatedAt, uPickupStatus, uPickupUpdatedAt, uDropoffStatus, uDropoffUpdatedAt, uPickedAt, uDate
               ]
             );
+
+            if (mergedData.vehicleId !== undefined) {
+              if (mergedData.vehicleId) {
+                await conn.query("UPDATE vehicles SET driverId = ? WHERE id = ?", [id, mergedData.vehicleId]);
+                await conn.query("UPDATE users SET vehicleId = '' WHERE vehicleId = ? AND uid != ?", [mergedData.vehicleId, id]);
+              } else {
+                await conn.query("UPDATE vehicles SET driverId = '' WHERE driverId = ?", [id]);
+              }
+            }
           } else if (table === "vehicles") {
             const busLat = mergedData.latitude !== undefined ? mergedData.latitude : (mergedData.location?.lat !== undefined ? mergedData.location.lat : null);
             const busLng = mergedData.longitude !== undefined ? mergedData.longitude : (mergedData.location?.lng !== undefined ? mergedData.location.lng : null);
@@ -3129,15 +3208,24 @@ async function start() {
             const mappedName = mergedData.model || mergedData.name || "";
             const mappedNumber = mergedData.plateNumber || mergedData.number || "";
             const mappedType = mergedData.yearMade || mergedData.type || "";
+            const mappedDriverId = mergedData.driverId !== undefined ? mergedData.driverId : "";
+            const mappedRouteId = mergedData.routeId !== undefined ? mergedData.routeId : "";
             await conn.query(
-              `INSERT INTO vehicles (id, orgId, name, number, type, capacity, status, latitude, longitude, lastUpdated) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
-               ON DUPLICATE KEY UPDATE orgId=?, name=?, number=?, type=?, capacity=?, status=?, latitude=?, longitude=?, lastUpdated=?`,
+              `INSERT INTO vehicles (id, orgId, name, number, type, capacity, status, latitude, longitude, lastUpdated, driverId, routeId) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+               ON DUPLICATE KEY UPDATE orgId=?, name=?, number=?, type=?, capacity=?, status=?, latitude=?, longitude=?, lastUpdated=?, driverId=?, routeId=?`,
               [
-                id, mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp,
-                mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp
+                id, mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp, mappedDriverId, mappedRouteId,
+                mergedData.orgId || "", mappedName, mappedNumber, mappedType, mergedData.capacity || 0, mergedData.status || "", busLat, busLng, lastUp, mappedDriverId, mappedRouteId
               ]
             );
+
+            if (mappedDriverId) {
+              await conn.query("UPDATE users SET vehicleId = ? WHERE uid = ?", [id, mappedDriverId]);
+              await conn.query("UPDATE users SET vehicleId = '' WHERE vehicleId = ? AND uid != ?", [id, mappedDriverId]);
+            } else if (mergedData.driverId === '') {
+              await conn.query("UPDATE users SET vehicleId = '' WHERE vehicleId = ?", [id]);
+            }
           } else if (table === "routes") {
             const routeData = mergedData || data || {};
             const startPt = routeData.startPoint ? (typeof routeData.startPoint === "string" ? routeData.startPoint : JSON.stringify(routeData.startPoint)) : "";

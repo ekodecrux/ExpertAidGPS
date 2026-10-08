@@ -27,6 +27,48 @@ const sanitizeCenter = (coord: any): { lat: number; lng: number } => {
   return { lat, lng };
 };
 
+export const extractCoords = (obj: any): { lat: number; lng: number } | null => {
+  if (!obj) return null;
+  let target = obj;
+  if (typeof obj === 'string') {
+    try {
+      target = JSON.parse(obj);
+    } catch (e) {
+      return null;
+    }
+  }
+  if (!target || typeof target !== 'object') return null;
+
+  // Handle array format [lat, lng]
+  if (Array.isArray(target) && target.length >= 2) {
+    const lat = Number(target[0]);
+    const lng = Number(target[1]);
+    if (isValidCoordinate(lat, lng)) return { lat, lng };
+  }
+
+  // Handle nested location or currentLocation (object or string)
+  let loc = target.location || target.currentLocation;
+  if (typeof loc === 'string') {
+    try {
+      loc = JSON.parse(loc);
+    } catch (e) {
+      loc = null;
+    }
+  }
+
+  const lat = target.lat ?? target.latitude ?? target.currentLat ?? (loc?.lat ?? loc?.latitude);
+  const lng = target.lng ?? target.longitude ?? target.currentLng ?? (loc?.lng ?? loc?.longitude);
+
+  if (lat !== undefined && lng !== undefined && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+    const nLat = Number(lat);
+    const nLng = Number(lng);
+    if (isValidCoordinate(nLat, nLng)) {
+      return { lat: nLat, lng: nLng };
+    }
+  }
+  return null;
+};
+
 export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }) {
   const { userData } = useAuth();
   const [activeView, setActiveView] = useState<View>(view);
@@ -220,6 +262,7 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
           if (res.vehicles) {
             setVehicles(prevVehicles => {
               const mysqlVehicles = (res.vehicles || [])
+                .filter((v: any) => v && (v.plateNumber?.trim() || v.number?.trim() || v.model?.trim() || v.name?.trim()))
                 .map((v: any) => {
                 const locObj = (v.latitude !== null && v.longitude !== null && v.latitude !== undefined && v.longitude !== undefined && isValidCoordinate(v.latitude, v.longitude))
                   ? { lat: Number(v.latitude), lng: Number(v.longitude) }
@@ -249,7 +292,7 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
                       longitude: prevV.longitude !== undefined ? prevV.longitude : merged[idx].longitude
                     };
                   }
-                } else if (prevV.location) {
+                } else if (prevV.location && (prevV.plateNumber?.trim() || prevV.number?.trim() || prevV.model?.trim() || prevV.name?.trim())) {
                   merged.push(prevV);
                 }
               });
@@ -353,7 +396,7 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
       // Merge/override existing MySQL vehicle items with real-time Firestore values (for GPS coordination accuracy)
       setVehicles(prevVehicles => {
         const merged = [...prevVehicles];
-        fsVehicles.forEach(fsV => {
+        fsVehicles.forEach((fsV: any) => {
           const idx = merged.findIndex(v => String(v.id) === String(fsV.id));
           if (idx !== -1) {
             // Keep existing MySQL parameters, but never let a null/invalid Firestore
@@ -363,7 +406,8 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
               ...fsV,
               location: fsV.location || merged[idx].location
             };
-          } else {
+          } else if (fsV.plateNumber?.trim() || fsV.number?.trim() || fsV.model?.trim() || fsV.name?.trim()) {
+            // Only push if it has an actual valid plate or model/name
             merged.push(fsV);
           }
         });
@@ -519,8 +563,8 @@ export default function OrgAdminDashboard({ view = 'overview' }: { view?: View }
   const renderContent = () => {
     switch (activeView) {
       case 'overview': return <Overview stats={stats} org={org} userData={userData} membersLabel={membersLabel} vehicles={vehicles} routes={routes} drivers={drivers} liveTrips={filteredLiveTrips} tripStats={tripStats} setActiveView={setActiveView} />;
-      case 'vehicles': return <VehiclesList vehicles={vehicles} orgId={selectedOrgId!} routes={routes} members={members} onRefresh={fetchMySQLData} />;
-      case 'drivers': return <DriversList drivers={drivers} orgId={selectedOrgId!} routes={routes} vehicles={vehicles} members={members} onRefresh={fetchMySQLData} />;
+      case 'vehicles': return <VehiclesList vehicles={vehicles} orgId={selectedOrgId!} org={org} routes={routes} drivers={drivers} members={members} onRefresh={fetchMySQLData} />;
+      case 'drivers': return <DriversList drivers={drivers} orgId={selectedOrgId!} org={org} routes={routes} vehicles={vehicles} members={members} onRefresh={fetchMySQLData} />;
       case 'members': {
         const filtered = members.filter(m => (isEducation ? m.role === 'user' : (m.role === 'user' || m.role === 'employee')));
         return <MembersList members={filtered} orgId={selectedOrgId!} label={memberLabel} labels={membersLabel} routes={routes} allMembers={members} classes={classes} isCollege={isCollege} isEducation={isEducation} onRefresh={fetchMySQLData} />;
@@ -560,8 +604,10 @@ function Overview({ stats, org, userData, membersLabel, vehicles, routes, liveTr
   const isCollege = org?.eduType === 'College' || (!org?.eduType && (org?.name?.toLowerCase().includes('college') || org?.name?.toLowerCase().includes('university')));
 
   const activeTrips = liveTrips.map((lt: any) => {
-    const vehicle = vehicles.find((v: any) => v.id === lt.vehicleId);
-    const busLoc = vehicle?.location || lt.location;
+    const vehicle = vehicles.find((v: any) => String(v.id) === String(lt.vehicleId));
+    const busLoc = (vehicle?.location && isValidCoordinate(vehicle.location.lat, vehicle.location.lng))
+      ? vehicle.location
+      : (extractCoords(lt) || (isValidCoordinate(vehicle?.latitude, vehicle?.longitude) ? { lat: Number(vehicle.latitude), lng: Number(vehicle.longitude) } : null));
     
     let distanceStr = '-- KM';
     let etaStr = '-- MINS';
@@ -576,13 +622,17 @@ function Overview({ stats, org, userData, membersLabel, vehicles, routes, liveTr
     }
 
     return {
+      ...lt,
       id: lt.id,
+      vehicleId: lt.vehicleId,
+      driverId: lt.driverId,
+      location: busLoc,
       routeId: lt.routeId,
       type: 'Vehicle',
       action: 'Live Tracking',
       locationName: routes.find((r: any) => r.id === lt.routeId)?.name || 'Unknown Route',
       status: 'Live',
-      plateNumber: vehicle?.plateNumber || '...',
+      plateNumber: vehicle?.plateNumber || lt.plateNumber || '...',
       distanceStr,
       etaStr
     };
@@ -650,47 +700,99 @@ function Overview({ stats, org, userData, membersLabel, vehicles, routes, liveTr
          </div>
 
          {/* Map Preview - 7 cols */}
-         <div className="lg:col-span-7 bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm relative h-[450px] lg:h-auto min-h-[450px]">
+         <div className="lg:col-span-7 bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm relative h-[450px] lg:h-[520px] min-h-[450px] w-full">
           <MapComponent 
             height="100%" 
-            zoom={15} 
-            center={sanitizeCenter(org?.location)}
+            className="w-full h-full min-h-[450px]"
+            zoom={14} 
+            center={sanitizeCenter((() => {
+              // 1. Live active trip
+              for (const trip of activeTrips) {
+                const vehicle = vehicles.find((v: any) => String(v.id) === String(trip.vehicleId));
+                const busLoc = trip.location || vehicle?.location || extractCoords(trip) || extractCoords(vehicle);
+                if (busLoc && isValidCoordinate(busLoc.lat, busLoc.lng)) return busLoc;
+              }
+              // 2. Standby / fleet vehicles
+              for (const v of vehicles) {
+                const vLoc = extractCoords(v);
+                if (vLoc && isValidCoordinate(vLoc.lat, vLoc.lng)) return vLoc;
+              }
+              // 3. Organization base location
+              const orgLoc = extractCoords(org?.location) || extractCoords(org);
+              if (orgLoc && isValidCoordinate(orgLoc.lat, orgLoc.lng)) return orgLoc;
+              // 4. Default BHEL Pai International hub
+              return { lat: 17.4954, lng: 78.2960 };
+            })())}
             highAccuracy={true}
           >
-               {org?.location && isValidCoordinate(org.location.lat, org.location.lng) && (
-                  <Marker 
-                    key="admin-preview-org-marker"
-                    position={[org.location.lat, org.location.lng]} 
-                    icon={createMarkerIcon(
-                      org?.sector === 'Education' ? (isCollege ? '#6366f1' : '#4f46e5') : '#0f172a', 
-                      getLocalIcon(org?.logo || org?.logoUrl || (org?.sector === 'Education' ? (isCollege ? 'graduation-cap' : 'school') : (org?.sector === 'Healthcare' ? 'hospital' : (org?.sector === 'Government' ? 'museum' : 'commercial')))), 
-                      org?.sector === 'Education' ? (isCollege ? '#6366f1' : '#4f46e5') : '#0f172a', 
-                      org?.name || 'BASE'
-                    )}
-                  >
-                    <Popup>
-                      <div className="p-2 text-center">
-                        <p className="text-[10px] font-black text-slate-800 uppercase italic leading-none">{org.name}</p>
-                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">{org.sector || 'Main Hub'}</p>
-                      </div>
-                    </Popup>
-                  </Marker>
-               )}
-               {/* Only render vehicles currently on an ACTIVE trip on road */}
+               {(() => {
+                 const orgLoc = extractCoords(org?.location) || extractCoords(org) || { lat: 17.4954, lng: 78.2960 };
+                 if (!orgLoc || !isValidCoordinate(orgLoc.lat, orgLoc.lng)) return null;
+                 return (
+                   <Marker 
+                     key="admin-preview-org-marker"
+                     position={[orgLoc.lat, orgLoc.lng]} 
+                     icon={createMarkerIcon(
+                       org?.sector === 'Education' ? (isCollege ? '#6366f1' : '#4f46e5') : '#0f172a', 
+                       getLocalIcon(org?.logo || org?.logoUrl || (org?.sector === 'Education' ? (isCollege ? 'graduation-cap' : 'school') : (org?.sector === 'Healthcare' ? 'hospital' : (org?.sector === 'Government' ? 'museum' : 'commercial')))), 
+                       org?.sector === 'Education' ? (isCollege ? '#6366f1' : '#4f46e5') : '#0f172a', 
+                       org?.name || 'MAIN HUB'
+                     )}
+                   >
+                     <Popup>
+                       <div className="p-2 text-center">
+                         <p className="text-[10px] font-black text-slate-800 uppercase italic leading-none">{org?.name || 'Organization Headquarters'}</p>
+                         <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">{org?.sector || 'Main Hub'}</p>
+                       </div>
+                     </Popup>
+                   </Marker>
+                 );
+               })()}
+               {/* 1. Live Vehicles currently on an ACTIVE trip on road */}
                {activeTrips.map((trip: any) => {
                  const vehicle = vehicles.find((v: any) => String(v.id) === String(trip.vehicleId));
-                 const busLoc = trip.location || vehicle?.location;
+                 const driver = drivers.find((d: any) => String(d.uid) === String(trip.driverId) || String(d.id) === String(trip.driverId));
+                 const route = routes.find((r: any) => String(r.id) === String(trip.routeId));
+                 const busLoc = trip.location || vehicle?.location || extractCoords(trip) || extractCoords(vehicle) || extractCoords(driver) || extractCoords(route?.startPoint) || extractCoords(org?.location) || { lat: 17.4954, lng: 78.2960 };
                  if (!busLoc || !isValidCoordinate(busLoc.lat, busLoc.lng)) return null;
                  return (
                    <Marker 
                      key={`ov-trip-${trip.id}`} 
                      position={[busLoc.lat, busLoc.lng]} 
-                     icon={vehicleIcon}
+                     icon={createMarkerIcon('#2563eb', getLocalIcon('bus'), '#2563eb', vehicle?.plateNumber || trip.plateNumber || 'LIVE BUS')}
                    >
                      <Popup>
                        <div className="p-2 text-center">
-                         <p className="text-[10px] font-black uppercase italic">{vehicle?.plateNumber || 'Live Bus'}</p>
+                         <p className="text-[10px] font-black uppercase italic">{vehicle?.plateNumber || trip.plateNumber || 'Live Bus'}</p>
                          <p className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Live On Trip</p>
+                         {driver && <p className="text-[8px] text-slate-700 mt-1 font-bold">Driver: {driver.name}</p>}
+                         {route && <p className="text-[8px] text-blue-600">Route: {route.name}</p>}
+                       </div>
+                     </Popup>
+                   </Marker>
+                 );
+               })}
+               {/* 2. Standby / Fleet Vehicles (displayed so map always shows fleet even when no active trips) */}
+               {vehicles.filter((v: any) => {
+                 const isOnTrip = activeTrips.some((t: any) => String(t.vehicleId) === String(v.id));
+                 return !isOnTrip;
+               }).map((vehicle: any) => {
+                 const driver = drivers.find((d: any) => String(d.uid) === String(vehicle.driverId) || String(d.id) === String(vehicle.driverId) || String(d.vehicleId) === String(vehicle.id));
+                 const route = routes.find((r: any) => String(r.id) === String(vehicle.routeId) || String(r.vehicleId) === String(vehicle.id));
+                 const busLoc = extractCoords(vehicle) || extractCoords(driver) || extractCoords(route?.startPoint) || extractCoords(org?.location) || { lat: 17.4954, lng: 78.2960 };
+                 if (!busLoc || !isValidCoordinate(busLoc.lat, busLoc.lng)) return null;
+                 return (
+                   <Marker
+                     key={`ov-standby-${vehicle.id}`}
+                     position={[busLoc.lat, busLoc.lng]}
+                     icon={createMarkerIcon('#64748b', getLocalIcon('bus'), '#64748b', vehicle.plateNumber || 'FLEET BUS')}
+                   >
+                     <Popup>
+                       <div className="p-2 text-center">
+                         <p className="text-[10px] font-black uppercase italic">{vehicle.plateNumber || `Bus ${vehicle.id}`}</p>
+                         <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Standby</p>
+                         {driver && <p className="text-[8px] text-slate-700 mt-1 font-bold">Driver: {driver.name}</p>}
+                         {route && <p className="text-[8px] text-blue-600">Route: {route.name}</p>}
                        </div>
                      </Popup>
                    </Marker>
@@ -816,27 +918,103 @@ function IncidentItem({ time, msg, status }: any) {
   );
 }
 
-function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }: any) {
+function VehiclesList({ vehicles, orgId, org, routes = [], drivers = [], members = [], onRefresh }: any) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [newVehicle, setNewVehicle] = useState({ plateNumber: '', model: '', yearMade: '', status: 'active' });
+  const [newVehicle, setNewVehicle] = useState({ plateNumber: '', model: '', yearMade: '', status: 'active', driverId: '' });
   const [editingVehicle, setEditingVehicle] = useState<any>(null);
   const [vehicleToDelete, setVehicleToDelete] = useState<any>(null);
 
+  const handleCloseAddModal = () => {
+    setIsAddModalOpen(false);
+    setNewVehicle({ plateNumber: '', model: '', yearMade: '', status: 'active', driverId: '' });
+  };
+
+  const cleanVehicles = useMemo(() => {
+    return (vehicles || []).filter((v: any) => {
+      if (!v) return false;
+      const modelStr = String(v.model || '').trim().toLowerCase();
+      const hasPlate = Boolean(v.plateNumber && String(v.plateNumber).trim() && String(v.plateNumber).trim() !== 'UNREGISTERED');
+      const hasNumber = Boolean(v.number && String(v.number).trim());
+      const hasModel = Boolean(modelStr && modelStr !== 'unknown model' && modelStr !== 'unknown');
+      const hasName = Boolean(v.name && String(v.name).trim());
+      return hasPlate || hasNumber || hasModel || hasName;
+    });
+  }, [vehicles]);
+
+  const getVehicleDisplayModel = (v: any) => {
+    const modelStr = String(v.model || '').trim();
+    if (modelStr && modelStr.toLowerCase() !== 'unknown model' && modelStr.toLowerCase() !== 'unknown') {
+      return modelStr;
+    }
+    if (v.name && String(v.name).trim()) {
+      return String(v.name).trim();
+    }
+    if (v.type && String(v.type).trim()) {
+      return String(v.type).trim();
+    }
+    if (v.plateNumber && String(v.plateNumber).trim() && String(v.plateNumber).trim() !== 'UNREGISTERED') {
+      return `Vehicle (${String(v.plateNumber).trim()})`;
+    }
+    return 'Fleet Vehicle';
+  };
+
+  const getVehicleDisplayPlate = (v: any) => {
+    return v.plateNumber?.trim() || v.number?.trim() || 'UNREGISTERED';
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newVehicle.plateNumber.trim()) {
+      toast.error('Vehicle number is required');
+      return;
+    }
+    if (!newVehicle.model.trim()) {
+      toast.error('Vehicle model is required');
+      return;
+    }
     try {
       const generatedId = 'VEH-' + Math.random().toString(36).substring(2, 9).toUpperCase();
+      const initialLat = org?.location?.lat || 17.5042;
+      const initialLng = org?.location?.lng || 78.3093;
+
       await saveMySQLRecord('insert', 'vehicles', generatedId, {
-        plateNumber: newVehicle.plateNumber,
-        model: newVehicle.model,
-        yearMade: newVehicle.yearMade,
+        plateNumber: newVehicle.plateNumber.trim(),
+        model: newVehicle.model.trim(),
+        yearMade: newVehicle.yearMade.trim(),
         status: newVehicle.status,
+        driverId: newVehicle.driverId || '',
+        latitude: initialLat,
+        longitude: initialLng,
         orgId
       });
-      toast.success('Vehicle registered successfully');
-      setIsAddModalOpen(false);
-      setNewVehicle({ plateNumber: '', model: '', yearMade: '', status: 'active' });
+
+      // Bi-directionally link driver and vehicle in Firestore & MySQL
+      try {
+        await setDoc(doc(db, 'vehicles', generatedId), { 
+          plateNumber: newVehicle.plateNumber.trim(), 
+          model: newVehicle.model.trim(), 
+          driverId: newVehicle.driverId || '',
+          location: { lat: initialLat, lng: initialLng },
+          orgId 
+        }, { merge: true });
+
+        if (newVehicle.driverId) {
+          // Unlink any other vehicles that had this driver
+          const otherVehicles = vehicles.filter((v: any) => v.id !== generatedId && v.driverId === newVehicle.driverId);
+          for (const ov of otherVehicles) {
+            await setDoc(doc(db, 'vehicles', ov.id), { driverId: '' }, { merge: true });
+            await saveMySQLRecord('update', 'vehicles', ov.id, { driverId: '' });
+          }
+          await setDoc(doc(db, 'users', newVehicle.driverId), { vehicleId: generatedId }, { merge: true });
+          await saveMySQLRecord('update', 'users', newVehicle.driverId, { vehicleId: generatedId });
+        }
+      } catch (syncErr) {
+        console.warn("Driver-vehicle link sync warning:", syncErr);
+      }
+
+      toast.success('Vehicle registered and linked successfully');
+      handleCloseAddModal();
       if (onRefresh) onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Network failure saving vehicle');
@@ -851,9 +1029,47 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
         plateNumber: editingVehicle.plateNumber,
         model: editingVehicle.model,
         yearMade: editingVehicle.yearMade || '',
-        status: editingVehicle.status || 'active'
+        status: editingVehicle.status || 'active',
+        driverId: editingVehicle.driverId || ''
       });
-      toast.success('Vehicle updated successfully');
+
+      // Bi-directionally link driver and vehicle in Firestore & MySQL
+      try {
+        await setDoc(doc(db, 'vehicles', editingVehicle.id), { 
+          plateNumber: editingVehicle.plateNumber,
+          model: editingVehicle.model,
+          driverId: editingVehicle.driverId || '' 
+        }, { merge: true });
+
+        if (editingVehicle.driverId) {
+          // 1. Unlink any previous driver that was assigned to this vehicle
+          const prevDrivers = drivers.filter((d: any) => (d.vehicleId === editingVehicle.id && d.uid !== editingVehicle.driverId && d.id !== editingVehicle.driverId));
+          for (const pd of prevDrivers) {
+            await setDoc(doc(db, 'users', pd.uid || pd.id), { vehicleId: '' }, { merge: true });
+            await saveMySQLRecord('update', 'users', pd.uid || pd.id, { vehicleId: '' });
+          }
+          // 2. Unlink any other vehicle that had this selected driver
+          const otherVehicles = vehicles.filter((v: any) => v.id !== editingVehicle.id && v.driverId === editingVehicle.driverId);
+          for (const ov of otherVehicles) {
+            await setDoc(doc(db, 'vehicles', ov.id), { driverId: '' }, { merge: true });
+            await saveMySQLRecord('update', 'vehicles', ov.id, { driverId: '' });
+          }
+          // 3. Link newly selected driver
+          await setDoc(doc(db, 'users', editingVehicle.driverId), { vehicleId: editingVehicle.id }, { merge: true });
+          await saveMySQLRecord('update', 'users', editingVehicle.driverId, { vehicleId: editingVehicle.id });
+        } else {
+          // Driver unassigned from this vehicle: clear vehicleId on all drivers that had this vehicle
+          const prevDrivers = drivers.filter((d: any) => (d.vehicleId === editingVehicle.id));
+          for (const pd of prevDrivers) {
+            await setDoc(doc(db, 'users', pd.uid || pd.id), { vehicleId: '' }, { merge: true });
+            await saveMySQLRecord('update', 'users', pd.uid || pd.id, { vehicleId: '' });
+          }
+        }
+      } catch (syncErr) {
+        console.warn("Driver-vehicle link sync warning:", syncErr);
+      }
+
+      toast.success('Vehicle and driver link updated successfully');
       setIsEditModalOpen(false);
       setEditingVehicle(null);
       if (onRefresh) onRefresh();
@@ -916,7 +1132,7 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {vehicles.map((v: any) => {
+              {cleanVehicles.map((v: any) => {
                 const isActive = routes.some((r: any) => r.vehicleId === v.id && members.some((m: any) => m.routeId === r.id));
                 return (
                   <tr key={v.id} className="group hover:bg-slate-50/50 transition-colors">
@@ -925,11 +1141,11 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
                         <div className="w-10 h-10 bg-indigo-50/80 rounded-xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all transform group-hover:rotate-3 shadow-sm border border-indigo-100/50">
                           <Bus className="w-5 h-5" />
                         </div>
-                        <span className="text-xs font-black text-slate-900 uppercase tracking-tight">{v.model || "Unknown Model"}</span>
+                        <span className="text-xs font-black text-slate-900 uppercase tracking-tight">{getVehicleDisplayModel(v)}</span>
                       </div>
                     </td>
                     <td className="px-8 py-5 whitespace-nowrap">
-                      <span className="text-xs font-mono font-black text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100/50 shadow-sm whitespace-nowrap inline-block">{v.plateNumber || "UNREGISTERED"}</span>
+                      <span className="text-xs font-mono font-black text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100/50 shadow-sm whitespace-nowrap inline-block">{getVehicleDisplayPlate(v)}</span>
                     </td>
                     <td className="px-8 py-5 text-center">
                       <div className="flex justify-center">
@@ -976,9 +1192,9 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
                   </tr>
                 );
               })}
-              {vehicles.length === 0 && (
+              {cleanVehicles.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-20 text-center">
+                  <td colSpan={5} className="py-20 text-center">
                     <Bus className="w-16 h-16 text-slate-100 mx-auto mb-4" />
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No assets registered in fleet</p>
                   </td>
@@ -990,10 +1206,10 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
 
         {/* Mobile View: Vertical Data Display with Clean Vertical Scroll */}
         <div className="md:hidden divide-y divide-slate-100 p-3 space-y-3">
-          {vehicles.map((v: any) => {
+          {cleanVehicles.map((v: any) => {
             const isActive = routes.some((r: any) => r.vehicleId === v.id && members.some((m: any) => m.routeId === r.id));
-            const linkedRoute = routes.find((r: any) => r.vehicleId === v.id);
-            const linkedDriver = members.find((m: any) => m.vehicleId === v.id);
+            const linkedRoute = routes.find((r: any) => r.vehicleId === v.id || r.id === v.routeId);
+            const linkedDriver = drivers.find((d: any) => String(d.uid) === String(v.driverId) || String(d.id) === String(v.driverId) || String(d.vehicleId) === String(v.id));
 
             return (
               <div key={v.id} className="pt-3 first:pt-0 space-y-3">
@@ -1003,9 +1219,9 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
                       <Bus className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
-                      <h4 className="text-xs font-black text-slate-900 uppercase truncate">{v.model || "Unknown Model"}</h4>
+                      <h4 className="text-xs font-black text-slate-900 uppercase truncate">{getVehicleDisplayModel(v)}</h4>
                       <span className="text-[11px] font-mono font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100/50 inline-block mt-0.5">
-                        {v.plateNumber || "UNREGISTERED"}
+                        {getVehicleDisplayPlate(v)}
                       </span>
                     </div>
                   </div>
@@ -1060,7 +1276,7 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
               </div>
             );
           })}
-          {vehicles.length === 0 && (
+          {cleanVehicles.length === 0 && (
             <div className="py-12 text-center text-slate-400 italic text-xs uppercase tracking-widest">
               No vehicles registered yet
             </div>
@@ -1069,15 +1285,19 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
       </div>
 
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+        <div 
+          onClick={handleCloseAddModal}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4"
+        >
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
+            onClick={e => e.stopPropagation()}
             className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl border border-slate-100"
           >
             <div className="flex justify-between items-center mb-8">
                <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none uppercase italic">Register Vehicle</h3>
-               <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-900"><X className="w-5 h-5" /></button>
+               <button type="button" onClick={handleCloseAddModal} className="p-2 text-slate-400 hover:text-slate-900"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleAdd} className="space-y-4">
               <div className="space-y-1.5">
@@ -1092,8 +1312,23 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">Year Made</label>
                 <input required type="text" value={newVehicle.yearMade} onChange={e => setNewVehicle({...newVehicle, yearMade: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all" placeholder="2024" />
               </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">Assign Driver (Optional)</label>
+                <select 
+                  value={newVehicle.driverId || ''} 
+                  onChange={e => setNewVehicle({...newVehicle, driverId: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all"
+                >
+                  <option value="">No Driver Assigned</option>
+                  {drivers.map((d: any) => (
+                    <option key={d.uid || d.id} value={d.uid || d.id}>
+                      {d.name} ({d.phone || d.email || 'Driver'})
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="flex gap-4 pt-6">
-                <button type="button" onClick={() => setIsAddModalOpen(false)} className="flex-1 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest hover:bg-slate-50 rounded-2xl transition-colors">Cancel</button>
+                <button type="button" onClick={handleCloseAddModal} className="flex-1 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest hover:bg-slate-50 rounded-2xl transition-colors">Cancel</button>
                 <button type="submit" className="flex-1 py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-600/20 active:scale-95 transition-all">Register</button>
               </div>
             </form>
@@ -1124,6 +1359,21 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">Year Made</label>
                 <input required type="text" value={editingVehicle.yearMade || ''} onChange={e => setEditingVehicle({...editingVehicle, yearMade: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">Assign Driver (Optional)</label>
+                <select 
+                  value={editingVehicle.driverId || ''} 
+                  onChange={e => setEditingVehicle({...editingVehicle, driverId: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all"
+                >
+                  <option value="">No Driver Assigned</option>
+                  {drivers.map((d: any) => (
+                    <option key={d.uid || d.id} value={d.uid || d.id}>
+                      {d.name} ({d.phone || d.email || 'Driver'})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex gap-4 pt-6">
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest hover:bg-slate-50 rounded-2xl transition-colors">Cancel</button>
@@ -1177,10 +1427,10 @@ function VehiclesList({ vehicles, orgId, routes = [], members = [], onRefresh }:
   );
 }
 
-function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [], onRefresh }: any) {
+function DriversList({ drivers, orgId, org, routes = [], vehicles = [], members = [], onRefresh }: any) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [newDriver, setNewDriver] = useState({ name: '', email: '', phone: '', licenseNumber: '' });
+  const [newDriver, setNewDriver] = useState({ name: '', email: '', phone: '', licenseNumber: '', vehicleId: '' });
   const [editingDriver, setEditingDriver] = useState<any>(null);
   const [creating, setCreating] = useState(false);
   const [resending, setResending] = useState<string | null>(null);
@@ -1276,9 +1526,21 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
         throw new Error(data.error || 'Creation failed');
       }
       
+      const newUid = data.uid || data.credentials?.uid || data.user?.uid;
+      if (newDriver.vehicleId && newUid) {
+        try {
+          await setDoc(doc(db, 'users', newUid), { vehicleId: newDriver.vehicleId }, { merge: true });
+          await saveMySQLRecord('update', 'users', newUid, { vehicleId: newDriver.vehicleId });
+          await setDoc(doc(db, 'vehicles', newDriver.vehicleId), { driverId: newUid }, { merge: true });
+          await saveMySQLRecord('update', 'vehicles', newDriver.vehicleId, { driverId: newUid });
+        } catch (linkErr) {
+          console.warn("New driver vehicle link warning:", linkErr);
+        }
+      }
+
       toast.success('Driver account created and email sent');
       setTempCreds({ email: data.credentials?.email || newDriver.email, pass: data.tempPassword });
-      setNewDriver({ name: '', email: '', phone: '', licenseNumber: '' });
+      setNewDriver({ name: '', email: '', phone: '', licenseNumber: '', vehicleId: '' });
       if (onRefresh) onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Failed to create driver');
@@ -1292,29 +1554,63 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
     if (!editingDriver) return;
     setCreating(true);
     const loadingToast = toast.loading('Updating driver profile...');
+    const dUid = editingDriver.uid || editingDriver.id;
     try {
-      const token = await user?.getIdToken();
-      const response = await fetch('/api/admin/update-user-profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          uid: editingDriver.uid || editingDriver.id,
-          name: editingDriver.name,
-          email: editingDriver.email,
-          phone: editingDriver.phone || '',
-          licenseNumber: editingDriver.licenseNumber || ''
-        })
-      });
-
-      const resData = await response.json();
-      if (!response.ok) {
-        throw new Error(resData.error || 'Update failed');
+      // 1. Link driver and vehicle bi-directionally in MySQL and Firestore
+      if (editingDriver.vehicleId !== undefined) {
+        const vId = editingDriver.vehicleId || '';
+        try {
+          await saveMySQLRecord('update', 'users', dUid, { vehicleId: vId });
+          await setDoc(doc(db, 'users', dUid), { vehicleId: vId }, { merge: true });
+          if (vId) {
+            // Unlink any other driver that had this vehicle
+            const otherDrivers = drivers.filter((d: any) => (d.uid !== dUid && d.id !== dUid && d.vehicleId === vId));
+            for (const od of otherDrivers) {
+              await saveMySQLRecord('update', 'users', od.uid || od.id, { vehicleId: '' });
+              await setDoc(doc(db, 'users', od.uid || od.id), { vehicleId: '' }, { merge: true });
+            }
+            await setDoc(doc(db, 'vehicles', vId), { driverId: dUid }, { merge: true });
+            await saveMySQLRecord('update', 'vehicles', vId, { driverId: dUid });
+          } else {
+            // Clear vehicle that had this driver
+            const prevVehicles = vehicles.filter((v: any) => v.driverId === dUid);
+            for (const pv of prevVehicles) {
+              await setDoc(doc(db, 'vehicles', pv.id), { driverId: '' }, { merge: true });
+              await saveMySQLRecord('update', 'vehicles', pv.id, { driverId: '' });
+            }
+          }
+        } catch (linkErr) {
+          console.warn("Driver vehicle assignment notice:", linkErr);
+        }
       }
 
-      toast.success('Driver profile updated successfully', { id: loadingToast });
+      // 2. Call backend update-user-profile API (gracefully handles phone format issues)
+      try {
+        const token = await user?.getIdToken();
+        const response = await fetch('/api/admin/update-user-profile', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            uid: dUid,
+            name: editingDriver.name,
+            email: editingDriver.email,
+            phone: editingDriver.phone || '',
+            licenseNumber: editingDriver.licenseNumber || '',
+            vehicleId: editingDriver.vehicleId || ''
+          })
+        });
+        if (!response.ok) {
+          const resData = await response.json().catch(() => ({}));
+          console.warn("User profile update warning:", resData.error);
+        }
+      } catch (apiErr) {
+        console.warn("Profile API notice:", apiErr);
+      }
+
+      toast.success('Driver profile and vehicle assignment updated successfully', { id: loadingToast });
       setIsEditModalOpen(false);
       setEditingDriver(null);
       if (onRefresh) onRefresh();
@@ -1420,14 +1716,14 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
                       <div className="flex flex-col gap-1">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Route</span>
                         <span className="text-[10px] font-black text-blue-600 uppercase tracking-tight">
-                          {routes.find((r: any) => r.id === d.routeId)?.name || 'Unassigned'}
+                          {routes.find((r: any) => String(r.id) === String(d.routeId) || String(r.driverId) === String(d.uid) || String(r.driverId) === String(d.id))?.name || 'Unassigned'}
                         </span>
                       </div>
                       <div className="w-px h-6 bg-slate-100"></div>
                       <div className="flex flex-col gap-1">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Vehicle</span>
                         <span className="text-[10px] font-black text-green-600 uppercase tracking-tight">
-                          {vehicles.find((v: any) => v.id === d.vehicleId)?.plateNumber || 'Unassigned'}
+                          {vehicles.find((v: any) => String(v.id) === String(d.vehicleId) || String(v.driverId) === String(d.uid) || String(v.driverId) === String(d.id))?.plateNumber || 'Unassigned'}
                         </span>
                       </div>
                     </div>
@@ -1488,8 +1784,8 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
         <div className="md:hidden divide-y divide-slate-100 p-3 space-y-3">
           {drivers.map((d: any) => {
             const isActive = routes.some((r: any) => r.driverId === d.uid && members.some((m: any) => m.routeId === r.id));
-            const assignedRoute = routes.find((r: any) => r.id === d.routeId);
-            const assignedVehicle = vehicles.find((v: any) => v.id === d.vehicleId);
+            const assignedRoute = routes.find((r: any) => String(r.id) === String(d.routeId) || String(r.driverId) === String(d.uid) || String(r.driverId) === String(d.id));
+            const assignedVehicle = vehicles.find((v: any) => String(v.id) === String(d.vehicleId) || String(v.driverId) === String(d.uid) || String(v.driverId) === String(d.id));
 
             return (
               <div key={d.id || d.uid} className="pt-3 first:pt-0 space-y-3">
@@ -1622,6 +1918,21 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
                     <input type="text" value={newDriver.licenseNumber} onChange={e => setNewDriver({...newDriver, licenseNumber: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all" placeholder="License #" />
                   </div>
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">Assign Vehicle (Optional)</label>
+                  <select 
+                    value={newDriver.vehicleId || ''} 
+                    onChange={e => setNewDriver({...newDriver, vehicleId: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all"
+                  >
+                    <option value="">No Vehicle Assigned</option>
+                    {vehicles.map((v: any) => (
+                      <option key={v.id} value={v.id}>
+                        {v.plateNumber || v.model || `Bus ${v.id}`} ({v.model || 'Vehicle'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="flex gap-4 pt-6">
                   <button type="button" onClick={() => setIsAddModalOpen(false)} className="flex-1 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest hover:bg-slate-50 rounded-2xl transition-colors">Cancel</button>
                   <button disabled={creating} type="submit" className="flex-1 py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
@@ -1667,6 +1978,21 @@ function DriversList({ drivers, orgId, routes = [], vehicles = [], members = [],
                   <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">DL Number</label>
                   <input type="text" value={editingDriver.licenseNumber || ''} onChange={e => setEditingDriver({...editingDriver, licenseNumber: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold" />
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">Assign Vehicle (Optional)</label>
+                <select 
+                  value={editingDriver.vehicleId || ''} 
+                  onChange={e => setEditingDriver({...editingDriver, vehicleId: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all"
+                >
+                  <option value="">No Vehicle Assigned</option>
+                  {vehicles.map((v: any) => (
+                    <option key={v.id} value={v.id}>
+                      {v.plateNumber || v.model || `Bus ${v.id}`} ({v.model || 'Vehicle'})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex gap-4 pt-6">
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest hover:bg-slate-50 rounded-2xl transition-colors">Cancel</button>
@@ -4361,7 +4687,7 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
     });
   }, [activeTrips, searchQuery, allVehicles, allRoutes, drivers]);
 
-  // Track registered fleet vehicles that are ASSIGNED (to a route or driver) and not currently on an active trip
+  // Track registered fleet vehicles that are not currently on an active trip
   const standbyVehicles = useMemo(() => {
     const activeVehicleIds = new Set(activeTrips.map(t => String(t.vehicleId)));
     const q = searchQuery.toLowerCase().trim();
@@ -4369,11 +4695,8 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
     return allVehicles
       .filter((v: any) => !activeVehicleIds.has(String(v.id)))
       .filter((v: any) => {
-        // Only show ASSIGNED fleet vehicles (must have an assigned driver or assigned route)
         const driver = drivers.find((d: any) => String(d.uid) === String(v.driverId) || String(d.id) === String(v.driverId) || String(d.vehicleId) === String(v.id));
         const route = allRoutes.find((r: any) => String(r.id) === String(v.routeId) || String(r.vehicleId) === String(v.id));
-        const isAssigned = !!(v.driverId || v.routeId || driver || route);
-        if (!isAssigned) return false;
 
         if (!q) return true;
         return (v.plateNumber?.toLowerCase().includes(q) ||
@@ -4811,7 +5134,7 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
               exit={{ opacity: 0, y: 30 }}
               className={cn(
                 "w-full lg:w-80 bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-xl lg:shadow-sm flex flex-col overflow-hidden shrink-0 relative lg:relative lg:h-full z-10 lg:z-0 order-2 lg:order-1",
-                viewMode === 'list' ? "flex h-[450px]" : "hidden lg:flex"
+                viewMode === 'list' ? "flex w-full h-[calc(100vh-230px)] min-h-[460px]" : "hidden lg:flex"
               )}
             >
               <div className="p-4 md:p-6 border-b border-slate-50 bg-slate-50/30">
@@ -5203,14 +5526,15 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
           )}
         </AnimatePresence>
 
-        {/* Right - Map View */}
+        {/* Right - Map View: ALWAYS rendered and mounted so tiles are cached and visible */}
         <div className={cn(
-          "flex-1 bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden relative lg:h-full min-h-[420px] order-1 lg:order-2",
-          viewMode === 'map' ? "block h-[calc(100vh-230px)] min-h-[460px] lg:h-full" : "hidden lg:block h-[500px] md:h-[620px] lg:h-full"
+          "flex-1 bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden relative lg:h-full w-full order-1 lg:order-2 min-h-[460px]",
+          viewMode === 'map' ? "block w-full h-[calc(100vh-230px)] min-h-[460px]" : "hidden lg:block lg:flex-1 lg:h-full lg:min-h-[500px]"
         )}>
           <MapComponent 
-            key={viewMode}
             height="100%" 
+            trigger={viewMode}
+            className="w-full h-full min-h-[460px]"
             zoom={selectedTrip || selectedVehicleId || selectedDriverId ? 15 : 13} 
             bounds={mapBounds}
             center={sanitizeCenter((() => {
@@ -5218,86 +5542,81 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
                 return focusedLocation;
               }
               if (selectedTrip) {
-                const busLoc = (allVehicles.find((v: any) => String(v.id) === String(selectedTrip.vehicleId))?.location || selectedTrip.location);
-                if (busLoc && isValidCoordinate(busLoc.lat, busLoc.lng)) {
-                  return { lat: parseFloat(busLoc.lat), lng: parseFloat(busLoc.lng) };
-                }
+                const sVehicle = allVehicles.find((v: any) => String(v.id) === String(selectedTrip.vehicleId));
+                const sLoc = extractCoords(selectedTrip) || extractCoords(sVehicle);
+                if (sLoc) return sLoc;
               }
               if (selectedVehicleId) {
                 const selV = allVehicles.find((v: any) => String(v.id) === String(selectedVehicleId));
-                const busLoc = selV?.location;
-                if (busLoc && isValidCoordinate(busLoc.lat, busLoc.lng)) {
-                  return { lat: parseFloat(busLoc.lat), lng: parseFloat(busLoc.lng) };
-                }
+                const vLoc = extractCoords(selV);
+                if (vLoc) return vLoc;
               }
               if (selectedDriverId) {
                 const selD = drivers.find((d: any) => String(d.uid) === String(selectedDriverId) || String(d.id) === String(selectedDriverId));
-                const dLoc = selD?.location || (isValidCoordinate(selD?.latitude, selD?.longitude) ? { lat: Number(selD.latitude), lng: Number(selD.longitude) } : null);
-                if (dLoc && isValidCoordinate(dLoc.lat, dLoc.lng)) {
-                  return { lat: parseFloat(dLoc.lat), lng: parseFloat(dLoc.lng) };
-                }
+                const dLoc = extractCoords(selD);
+                if (dLoc) return dLoc;
               }
-              const firstLiveBus = activeTrips.find(t => t.location && isValidCoordinate(t.location.lat, t.location.lng))?.location ||
-                                   allVehicles.find(v => v.location && isValidCoordinate(v.location.lat, v.location.lng))?.location;
-              if (firstLiveBus && isValidCoordinate(firstLiveBus.lat, firstLiveBus.lng)) {
-                return { lat: parseFloat(firstLiveBus.lat), lng: parseFloat(firstLiveBus.lng) };
+              // Active trips
+              for (const trip of activeTrips) {
+                const tVehicle = allVehicles.find((v: any) => String(v.id) === String(trip.vehicleId));
+                const tLoc = extractCoords(trip) || extractCoords(tVehicle);
+                if (tLoc) return tLoc;
               }
-              if (org?.location && isValidCoordinate(org.location.lat, org.location.lng)) {
-                return org.location;
+              // Standby assigned vehicles
+              for (const v of standbyVehicles) {
+                const vLoc = extractCoords(v);
+                if (vLoc) return vLoc;
               }
+              // Org location
+              const orgLoc = extractCoords(org?.location) || extractCoords(org);
+              if (orgLoc) return orgLoc;
 
-              // Keep the map anchored before the organization or a live GPS fix loads.
-              // This is important on mobile when no active fleet can provide a center.
-              const firstKnownLocation = allVehicles
-                .map((vehicle: any) => vehicle?.location)
-                .find((location: any) => location && isValidCoordinate(location.lat, location.lng));
-              if (firstKnownLocation) {
-                return {
-                  lat: Number(firstKnownLocation.lat),
-                  lng: Number(firstKnownLocation.lng)
-                };
-              }
-
-              return { lat: 17.4504, lng: 78.3808 };
+              // Fallback BHEL Pai International hub
+              return { lat: 17.4954, lng: 78.2960 };
             })())}
           >
             {/* Org Marker */}
-            {org?.location && isValidCoordinate(org.location.lat, org.location.lng) && (
-              <Marker 
-                key="tracking-org-marker"
-                position={[org.location.lat, org.location.lng]} 
-                icon={createMarkerIcon(orgColor, orgIconUrl, orgColor, org.name)}
-              >
-                <Popup>
-                  <div className="p-2 text-center">
-                    <p className="text-[10px] font-black text-slate-800 uppercase italic">{org.name}</p>
-                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">Main Headquarters</p>
-                  </div>
-                </Popup>
-              </Marker>
-            )}
+            {(() => {
+              const orgLoc = extractCoords(org?.location) || extractCoords(org) || { lat: 17.4954, lng: 78.2960 };
+              if (!orgLoc || !isValidCoordinate(orgLoc.lat, orgLoc.lng)) return null;
+              return (
+                <Marker 
+                  key="tracking-org-marker"
+                  position={[orgLoc.lat, orgLoc.lng]} 
+                  icon={createMarkerIcon(orgColor, orgIconUrl, orgColor, org?.name || 'HEADQUARTERS')}
+                >
+                  <Popup>
+                    <div className="p-2 text-center">
+                      <p className="text-[10px] font-black text-slate-800 uppercase italic">{org?.name || 'Main Headquarters'}</p>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">Main Headquarters</p>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })()}
 
             {/* Active Running Trip Bus Markers */}
             {filteredActiveTrips.map(trip => {
               const vehicle = allVehicles.find((v: any) => String(v.id) === String(trip.vehicleId));
+              const driver = drivers.find((d: any) => String(d.uid) === String(trip.driverId) || String(d.id) === String(trip.driverId));
+              const route = allRoutes.find((r: any) => String(r.id) === String(trip.routeId));
               const isSelected = selectedTripId === trip.id;
-              const busLoc = vehicle?.location || trip.location;
+              const busLoc = extractCoords(trip) || extractCoords(vehicle) || extractCoords(driver) || extractCoords(route?.startPoint) || extractCoords(org?.location) || { lat: 17.4954, lng: 78.2960 };
               if (!busLoc || !isValidCoordinate(busLoc.lat, busLoc.lng)) return null;
 
               return (
                 <Marker 
                   key={`active-trip-${trip.id}`}
-                  position={[Number(busLoc.lat), Number(busLoc.lng)]}
-                  icon={createMarkerIcon(isSelected ? '#2563eb' : '#3b82f6', 'https://img.icons8.com/fluency/50/bus.png', isSelected ? '#2563eb' : '#3b82f6', vehicle?.plateNumber || 'LIVE BUS')}
+                  position={[busLoc.lat, busLoc.lng]}
+                  icon={createMarkerIcon(isSelected ? '#2563eb' : '#3b82f6', getLocalIcon('bus'), isSelected ? '#2563eb' : '#3b82f6', vehicle?.plateNumber || trip.plateNumber || 'LIVE BUS')}
                   eventHandlers={{ click: () => { setSelectedTripId(trip.id); setSelectedVehicleId(null); } }}
                 >
                   <Popup>
                     <div className="p-2 min-w-[160px]">
-                      <p className="text-xs font-black text-slate-900 border-b border-slate-100 pb-1 mb-1">{vehicle?.plateNumber || 'Fleet Bus'}</p>
+                      <p className="text-xs font-black text-slate-900 border-b border-slate-100 pb-1 mb-1">{vehicle?.plateNumber || trip.plateNumber || 'Fleet Bus'}</p>
                       <div className="space-y-1 my-2 text-[8px] font-bold uppercase tracking-widest text-slate-500">
                         <p className="flex justify-between"><span>Status:</span> <span className="text-blue-600 font-black">{trip.status || 'Live'}</span></p>
                         {(() => {
-                           const driver = drivers.find((d: any) => String(d.uid) === String(trip.driverId) || String(d.id) === String(trip.driverId));
                            if (!driver) return null;
                            return (
                              <>
@@ -5314,19 +5633,19 @@ function LiveMap({ org, members, drivers = [], routes: allRoutes = [], vehicles:
               );
             })}
 
-            {/* Standby Fleet Vehicles with Known Location (Only Assigned) */}
+            {/* Standby Fleet Vehicles with Known Location */}
             {standbyVehicles.map((vehicle: any) => {
               const driver = drivers.find((d: any) => String(d.uid) === String(vehicle.driverId) || String(d.id) === String(vehicle.driverId) || String(d.vehicleId) === String(vehicle.id));
               const route = allRoutes.find((r: any) => String(r.id) === String(vehicle.routeId) || String(r.vehicleId) === String(vehicle.id));
-              const busLoc = vehicle.location || (driver?.location);
+              const busLoc = extractCoords(vehicle) || extractCoords(driver) || extractCoords(route?.startPoint) || extractCoords(org?.location) || { lat: 17.4954, lng: 78.2960 };
               if (!busLoc || !isValidCoordinate(busLoc.lat, busLoc.lng)) return null;
               const isSelected = selectedVehicleId === vehicle.id;
 
               return (
                 <Marker
                   key={`standby-marker-${vehicle.id}`}
-                  position={[Number(busLoc.lat), Number(busLoc.lng)]}
-                  icon={createMarkerIcon(isSelected ? '#64748b' : '#94a3b8', 'https://img.icons8.com/fluency/50/bus.png', isSelected ? '#64748b' : '#94a3b8', vehicle.plateNumber || 'STANDBY BUS')}
+                  position={[busLoc.lat, busLoc.lng]}
+                  icon={createMarkerIcon(isSelected ? '#64748b' : '#94a3b8', getLocalIcon('bus'), isSelected ? '#64748b' : '#94a3b8', vehicle.plateNumber || 'STANDBY BUS')}
                   eventHandlers={{ click: () => { setSelectedVehicleId(vehicle.id); setSelectedTripId(null); setSelectedDriverId(null); } }}
                 >
                   <Popup>
