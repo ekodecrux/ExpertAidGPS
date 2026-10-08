@@ -94,12 +94,12 @@ export default function DriverMapView({
 
   // Helper to check if a student has been handled based on direction
   const isHandled = (u: any, direction: 'pickup' | 'dropoff') => {
-    if (u.status === 'absent') return true;
+    if (u.status === 'absent' || u.pickupStatus === 'absent' || u.dropoffStatus === 'absent') return true;
     if (direction === 'dropoff') {
-      return u.status === 'dropped';
+      return u.status === 'dropped' || u.dropoffStatus === 'dropped';
     }
     // For pickup, 'dropped' also counts as 'picked'
-    return u.status === 'picked' || u.status === 'dropped';
+    return u.status === 'picked' || u.status === 'dropped' || u.pickupStatus === 'picked' || u.pickupStatus === 'dropped';
   };
 
   // Process manifest to ensure statuses are fresh for today and separate for pickup/dropoff
@@ -166,13 +166,21 @@ export default function DriverMapView({
     }
 
     const direction = activeTrip?.direction || tripType;
-    const isOrgCurrent = activeTrip?.currentStopId === 'ORG';
+    const isOrgExplicit = activeTrip?.currentStopId === 'ORG';
     const totalStops = sortedStopsList.length;
 
     const checkStopHandled = (stop: any) => {
       const members = processedManifest.filter(u => String(u.pickupPointId) === String(stop.id));
       return members.length > 0 && members.every(u => isHandled(u, direction));
     };
+
+    const allRouteMembersHandled = processedManifest.length > 0 && processedManifest.every(u => isHandled(u, direction));
+    const allStopsHandled = sortedStopsList.length > 0 && sortedStopsList.every(s => {
+      const mems = processedManifest.filter(u => String(u.pickupPointId) === String(s.id));
+      return mems.length === 0 || mems.every(u => isHandled(u, direction));
+    });
+
+    const isOrgCurrent = isOrgExplicit || allRouteMembersHandled || allStopsHandled;
 
     let currentIdx = -1;
     if (activeTrip?.currentStopId && !isOrgCurrent) {
@@ -214,7 +222,7 @@ export default function DriverMapView({
         }
       });
 
-      if (!nextStop && currentIdx === sortedStopsList.length - 1 && direction === 'pickup') {
+      if (!nextStop && currentIdx === sortedStopsList.length - 1) {
         nextStop = {
           id: 'ORG',
           name: org?.name || 'School / Base Hub',
@@ -239,7 +247,7 @@ export default function DriverMapView({
   }, [sortedStopsList, activeTrip, tripType, processedManifest, org, currentRoute]);
 
   const targetStopCoords = React.useMemo(() => {
-    if (activeTrip?.currentStopId === 'ORG') {
+    if (activeTrip?.currentStopId === 'ORG' || stopsBreakdown.isOrgCurrent) {
       return (org?.location && isValidCoordinate(org.location.lat, org.location.lng))
         ? { lat: Number(org.location.lat), lng: Number(org.location.lng) }
         : null;
@@ -252,7 +260,7 @@ export default function DriverMapView({
       return { lat: Number(firstPending.lat), lng: Number(firstPending.lng) };
     }
     return null;
-  }, [activeTrip?.currentStopId, org?.location, currentTargetStop, sortedStopsList]);
+  }, [activeTrip?.currentStopId, stopsBreakdown.isOrgCurrent, org?.location, currentTargetStop, sortedStopsList]);
 
   // Real road-following path directly from Driver position to the TARGET STOP
   const getNavigationRouteStops = (): [number, number][] => {
@@ -460,11 +468,26 @@ export default function DriverMapView({
     if (!activeTrip || !currentRoute?.pickupPoints) return;
     if (activeTrip.status !== 'live' && activeTrip.status !== 'ongoing') return;
 
+    const direction = activeTrip?.direction || tripType;
+    const allRouteMembersHandled = processedManifest.length > 0 && processedManifest.every(u => isHandled(u, direction));
+    const allStopsHandled = sortedStopsList.length > 0 && sortedStopsList.every(s => {
+      const mems = processedManifest.filter(u => String(u.pickupPointId) === String(s.id));
+      return mems.length === 0 || mems.every(u => isHandled(u, direction));
+    });
+
+    // If ALL stops/passengers on the entire route are completed -> Advance to ORG!
+    if (allRouteMembersHandled || allStopsHandled) {
+      if (activeTrip.currentStopId !== 'ORG') {
+        handleUpdateStop('ORG');
+        toast.success(direction === 'pickup' ? "All stops completed! Returning to School / Base Hub." : "All drops completed! Returning to Base Hub.", { id: 'auto-advance-org' });
+      }
+      return;
+    }
+
     const currentStopId = activeTrip.currentStopId;
     if (!currentStopId || currentStopId === 'ORG') return;
 
     const stopMembers = processedManifest.filter(u => String(u.pickupPointId) === String(currentStopId));
-    const direction = activeTrip?.direction || tripType;
     const allHandled = stopMembers.length > 0 && stopMembers.every(u => isHandled(u, direction));
 
     // If all passengers at this stop are completed/handled
@@ -499,96 +522,13 @@ export default function DriverMapView({
         });
       }
 
-      // Small elegant delay to let the driver see the UI state complete
-      const timer = setTimeout(async () => {
-        // Close the popup/modal
-        setSelectedStopId(null);
-
-        if (nextPendingStop) {
-          try {
-            // Optimistic local state updates to prevent delayed render loops
-            if (setActiveTrip) {
-              setActiveTrip({
-                ...activeTrip,
-                currentStopId: nextPendingStop.id
-              });
-            }
-            if (setDriverData && driverData) {
-              const updatedTrips = (driverData.trips || []).map((t: any) => {
-                if (t && t.id === activeTrip.id) {
-                  return { ...t, currentStopId: nextPendingStop.id };
-                }
-                return t;
-              });
-              setDriverData({
-                ...driverData,
-                trips: updatedTrips
-              });
-            }
-
-            toast.success(`Advancing to next stop: ${nextPendingStop.name}`, { id: `auto-advance-${currentStopId}` });
-
-            // Run database writes concurrently in background
-            Promise.all([
-              updateDoc(doc(db, 'trips', activeTrip.id), {
-                currentStopId: nextPendingStop.id
-              }),
-              saveMySQLRecord('update', 'trips', activeTrip.id, {
-                currentStopId: nextPendingStop.id
-              })
-            ]).catch((err) => {
-              console.warn("[AutoAdvance] background write failed:", err);
-            });
-          } catch (e) {
-            console.error("Error auto-advancing stop:", e);
-          }
-        } else {
-          // If no more pending stops at all, navigate to ORG!
-          try {
-            // Optimistic local state updates
-            if (setActiveTrip) {
-              setActiveTrip({
-                ...activeTrip,
-                currentStopId: 'ORG'
-              });
-            }
-            if (setDriverData && driverData) {
-              const updatedTrips = (driverData.trips || []).map((t: any) => {
-                if (t && t.id === activeTrip.id) {
-                  return { ...t, currentStopId: 'ORG' };
-                }
-                return t;
-              });
-              setDriverData({
-                ...driverData,
-                trips: updatedTrips
-              });
-            }
-
-            if (direction === 'pickup') {
-              toast.success("All stops completed! Returning to base.", { id: 'auto-advance-org' });
-            } else {
-              toast.success("All drops completed! Returning to base.", { id: 'auto-advance-finished' });
-            }
-
-            // Run database writes concurrently in background
-            Promise.all([
-              updateDoc(doc(db, 'trips', activeTrip.id), {
-                currentStopId: 'ORG'
-              }),
-              saveMySQLRecord('update', 'trips', activeTrip.id, {
-                currentStopId: 'ORG'
-              })
-            ]).catch((err) => {
-              console.warn("[AutoAdvance to ORG] background write failed:", err);
-            });
-          } catch (e) {
-            console.error("Error auto-advancing to ORG:", e);
-          }
-        }
-      }, 800);
-
-      return () => clearTimeout(timer);
+      if (nextPendingStop) {
+        handleUpdateStop(nextPendingStop.id);
+        toast.success(`Advancing to next stop: ${nextPendingStop.name}`, { id: `auto-advance-${currentStopId}` });
+      } else {
+        handleUpdateStop('ORG');
+        toast.success(direction === 'pickup' ? "All stops completed! Returning to Base Hub." : "All drops completed! Returning to Base Hub.", { id: 'auto-advance-org' });
+      }
     }
   }, [activeTrip?.id, activeTrip?.currentStopId, activeTrip?.status, activeTrip?.direction, processedManifest, sortedStopsList]);
 
@@ -1004,6 +944,46 @@ export default function DriverMapView({
       });
       setManifest(updatedManifest);
 
+      // Immediate auto-advance check upon updating member status
+      const allMembersHandled = updatedManifest.length > 0 && updatedManifest.every(m => isHandled(m, direction));
+      if (allMembersHandled && activeTrip) {
+        handleUpdateStop('ORG');
+        toast.success(direction === 'pickup' ? "All stops completed! Returning to School / Base Hub." : "All drops completed! Returning to Base Hub.", { id: 'route-completed-org' });
+      } else if (activeTrip && activeTrip.currentStopId && activeTrip.currentStopId !== 'ORG') {
+        const curStopId = String(activeTrip.currentStopId);
+        const curStopMems = updatedManifest.filter(m => String(m.pickupPointId) === curStopId);
+        if (curStopMems.length > 0 && curStopMems.every(m => isHandled(m, direction))) {
+          const points = sortedStopsList;
+          const curIdx = points.findIndex((p: any) => String(p.id) === curStopId);
+          let nextPending: any = null;
+          if (curIdx !== -1) {
+            for (let i = curIdx + 1; i < points.length; i++) {
+              const p = points[i];
+              const mems = updatedManifest.filter(m => String(m.pickupPointId) === String(p.id));
+              if (mems.some(m => !isHandled(m, direction))) {
+                nextPending = p;
+                break;
+              }
+            }
+          }
+          if (!nextPending) {
+            nextPending = points.find((p: any) => {
+              if (String(p.id) === curStopId) return false;
+              const mems = updatedManifest.filter(m => String(m.pickupPointId) === String(p.id));
+              return mems.some(m => !isHandled(m, direction));
+            });
+          }
+
+          if (nextPending) {
+            handleUpdateStop(nextPending.id);
+            toast.success(`Next stop: ${nextPending.name}`, { id: `next-stop-${nextPending.id}` });
+          } else {
+            handleUpdateStop('ORG');
+            toast.success("All stops completed! Returning to Base Hub.", { id: 'route-completed-org' });
+          }
+        }
+      }
+
       // Keep active trip manifest synchronized dynamically
       if (activeTrip) {
         await saveMySQLRecord("update", "trips", activeTrip.id, {
@@ -1303,18 +1283,33 @@ export default function DriverMapView({
 
           {org?.location && isValidCoordinate(org.location.lat, org.location.lng) && (
             <Marker 
-              key={`driver-org-marker-${parseFloat(org.location.lat)}-${parseFloat(org.location.lng)}`}
+              key={`driver-org-marker-${parseFloat(org.location.lat)}-${parseFloat(org.location.lng)}-${stopsBreakdown.isOrgCurrent ? 'current' : 'idle'}`}
               position={[parseFloat(org.location.lat), parseFloat(org.location.lng)]} 
-              icon={createMarkerIcon(activeTrip?.currentStopId === 'ORG' ? '#2563eb' : '#f97316', orgIconUrl, activeTrip?.currentStopId === 'ORG' ? '#2563eb' : '#f97316', org?.name || 'OFFICE')} 
+              icon={createMarkerIcon(
+                stopsBreakdown.isOrgCurrent ? '#2563eb' : '#f97316', 
+                orgIconUrl, 
+                stopsBreakdown.isOrgCurrent ? '#2563eb' : '#f97316', 
+                `${org?.name || 'OFFICE'}${stopsBreakdown.isOrgCurrent ? ' (Destination)' : ''}`,
+                stopsBreakdown.isOrgCurrent ? '#2563eb' : '#0f172a'
+              )} 
+              eventHandlers={{
+                click: () => {
+                  handleUpdateStop('ORG');
+                  if (mapRef.current) {
+                    mapRef.current.flyTo([Number(org.location.lat), Number(org.location.lng)], 16);
+                  }
+                  toast.success(`Targeting ${org?.name || 'Base Hub'}`);
+                }
+              }}
             />
           )}
 
           {currentRoute?.pickupPoints?.map((p: any, idx: number) => {
             const userCount = processedManifest.filter(u => String(u.pickupPointId) === String(p.id)).length;
-            const isCurrent = String(activeTrip?.currentStopId) === String(p.id);
+            const isCurrent = !stopsBreakdown.isOrgCurrent && String(activeTrip?.currentStopId) === String(p.id);
             const direction = activeTrip?.direction || tripType;
-            const stopMembers = processedManifest.filter(m => m.pickupPointId === p.id);
-            const isHandledStop = stopMembers.length > 0 && stopMembers.every(m => isHandled(m, direction));
+            const stopMembers = processedManifest.filter(m => String(m.pickupPointId) === String(p.id));
+            const isHandledStop = stopsBreakdown.isOrgCurrent || (stopMembers.length > 0 && stopMembers.every(m => isHandled(m, direction))) || (stopMembers.length === 0 && idx < stopsBreakdown.currentIdx);
             
             // A stop is "passed" only if it's handled, regardless of target index
             const isPassed = isHandledStop;
@@ -1423,7 +1418,16 @@ export default function DriverMapView({
                 return (
                   <div
                     className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-600/30 border border-blue-400 active:scale-95 transition-all min-w-[170px] max-w-[250px] cursor-pointer"
-                    onClick={() => !isOrg && setSelectedStopId(currentStop.id)}
+                    onClick={() => {
+                      if (isOrg) {
+                        if (org?.location && isValidCoordinate(org.location.lat, org.location.lng) && mapRef.current) {
+                          mapRef.current.flyTo([Number(org.location.lat), Number(org.location.lng)], 16);
+                          toast.success(`Centered on Base Hub`);
+                        }
+                      } else {
+                        setSelectedStopId(currentStop.id);
+                      }
+                    }}
                   >
                     <div className="w-8 h-8 bg-white text-blue-600 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-md">
                       {isOrg ? <Shield size={16} /> : `${handledCount}/${totalCount}`}
@@ -1432,7 +1436,7 @@ export default function DriverMapView({
                       <div className="flex items-center gap-1.5 leading-none mb-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         <span className="text-[8px] font-black uppercase text-blue-200 tracking-wider">
-                          Current {!isOrg && `#${stopNumber}`}
+                          {isOrg ? "Base Hub (Destination)" : `Current #${stopNumber}`}
                         </span>
                       </div>
                       <span className="text-xs font-black uppercase truncate w-full leading-tight font-extrabold">
@@ -1453,7 +1457,17 @@ export default function DriverMapView({
 
                 return (
                   <div
-                    onClick={() => !isOrg && setSelectedStopId(nextStop.id)}
+                    onClick={() => {
+                      if (isOrg) {
+                        handleUpdateStop('ORG');
+                        if (org?.location && isValidCoordinate(org.location.lat, org.location.lng) && mapRef.current) {
+                          mapRef.current.flyTo([Number(org.location.lat), Number(org.location.lng)], 16);
+                        }
+                        toast.success(`Targeting Base Hub`);
+                      } else {
+                        setSelectedStopId(nextStop.id);
+                      }
+                    }}
                     className="flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 bg-indigo-50/95 backdrop-blur-md border-2 border-indigo-300 text-indigo-900 rounded-2xl shadow-sm hover:bg-indigo-100/80 active:scale-95 transition-all min-w-[150px] max-w-[220px] cursor-pointer"
                   >
                     <div className="w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black text-[10px] shrink-0 shadow-xs">
@@ -1498,14 +1512,15 @@ export default function DriverMapView({
                 );
               })}
 
-              {/* 5. Final Destination Hub (If pickup route heading to school/hub) */}
-              {direction === 'pickup' && !isOrgCurrent && (
+              {/* 5. Final Destination Hub */}
+              {!isOrgCurrent && (
                 <div
                   onClick={() => {
+                    handleUpdateStop('ORG');
                     if (org?.location && isValidCoordinate(org.location.lat, org.location.lng) && mapRef.current) {
                       mapRef.current.flyTo([Number(org.location.lat), Number(org.location.lng)], 16);
-                      toast.success(`Centered on Base Hub`);
                     }
+                    toast.success(`Targeting Base Hub`);
                   }}
                   className="flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 bg-orange-50/95 backdrop-blur-md border border-orange-200 text-orange-900 rounded-2xl shadow-sm cursor-pointer hover:bg-orange-100/80 active:scale-95 transition-all min-w-[140px] max-w-[180px]"
                 >
