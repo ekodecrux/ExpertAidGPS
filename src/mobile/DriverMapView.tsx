@@ -1369,60 +1369,39 @@ export default function DriverMapView({
               className="flex items-center gap-2.5 overflow-x-auto py-2 px-1 scrollbar-none select-none max-w-full"
               style={{ WebkitOverflowScrolling: 'touch' }}
             >
-              {/* 1. At the starting: Completed Stops Button with Expand/Collapse Icon */}
+              {/* 1. At the starting: Completed Stops Toggle with Tick Mark Only (No text) */}
               <div className="flex-shrink-0 flex items-center">
                 <button
                   type="button"
                   onClick={() => setShowCompleted(!showCompleted)}
-                  className={`flex-shrink-0 h-13 px-3.5 rounded-2xl flex items-center gap-2 transition-all shadow-md border cursor-pointer active:scale-95 ${
+                  className={`flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-md border cursor-pointer active:scale-95 ${
                     showCompleted 
                       ? 'bg-emerald-600 text-white border-emerald-500 ring-2 ring-emerald-300/50' 
                       : completedStops.length > 0
-                        ? 'bg-white/95 backdrop-blur-md text-emerald-800 border-emerald-200/80 hover:bg-emerald-50 shadow-sm'
-                        : 'bg-white/90 text-slate-400 border-slate-200 shadow-sm'
+                        ? 'bg-white/95 backdrop-blur-md text-emerald-600 border-emerald-200/90 hover:bg-emerald-50 shadow-sm'
+                        : 'bg-white/90 text-slate-300 border-slate-200 shadow-sm'
                   }`}
-                  title={showCompleted ? "Collapse Completed Stops" : `Expand ${completedStops.length} Completed Stops`}
-                  aria-label={showCompleted ? "Collapse Completed Stops" : `Expand ${completedStops.length} Completed Stops`}
+                  title={showCompleted ? "Collapse Completed Stops" : "Show Completed Stops"}
+                  aria-label="Completed stops toggle"
                 >
-                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs ${
-                    showCompleted ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'
-                  }`}>
-                    <CheckCircle size={15} />
-                  </div>
-                  <div className="flex flex-col items-start leading-none">
-                    <span className="text-[8px] font-black uppercase tracking-wider">
-                      {completedStops.length} Done
-                    </span>
-                    <span className="text-[10px] font-bold">
-                      {showCompleted ? 'Hide' : 'Stops'}
-                    </span>
-                  </div>
-                  <div className="ml-0.5">
-                    {showCompleted ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
-                  </div>
+                  <CheckCircle size={22} className={showCompleted ? "text-white" : completedStops.length > 0 ? "text-emerald-600" : "text-slate-300"} />
                 </button>
               </div>
 
               {/* 1b. Expanded Completed Stops (Shown Horizontally at the Start) */}
               {showCompleted && completedStops.map((stop: any, cIdx: number) => {
-                const stopUsers = processedManifest.filter(u => String(u.pickupPointId) === String(stop?.id));
-                const handledCount = stopUsers.filter((u: any) => u.status === (direction === 'dropoff' ? 'dropped' : 'picked') || u.status === 'absent').length;
-                const userCount = stopUsers.length;
                 const stopNum = stop.originalIndex !== undefined ? stop.originalIndex + 1 : cIdx + 1;
 
                 return (
                   <div
                     key={`completed-${stop.id}-${cIdx}`}
                     onClick={() => setSelectedStopId(stop.id)}
-                    className="flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 bg-emerald-50/95 backdrop-blur-md border border-emerald-200 rounded-2xl text-emerald-800 shadow-sm cursor-pointer hover:bg-emerald-100/80 active:scale-95 transition-all min-w-[130px] max-w-[190px]"
+                    className="flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 bg-emerald-50/95 backdrop-blur-md border border-emerald-200 rounded-2xl text-emerald-800 shadow-sm cursor-pointer hover:bg-emerald-100/80 active:scale-95 transition-all min-w-[120px] max-w-[180px]"
                   >
                     <div className="w-6 h-6 bg-emerald-600 text-white rounded-lg flex items-center justify-center font-black text-[9px] shrink-0 shadow-xs">
                       ✓ #{stopNum}
                     </div>
                     <div className="flex flex-col items-start min-w-0 overflow-hidden flex-1">
-                      <span className="text-[7px] font-black uppercase tracking-widest text-emerald-600 leading-none mb-0.5">
-                        Done ({handledCount}/{userCount})
-                      </span>
                       <span className="text-[11px] font-black uppercase truncate w-full leading-tight">
                         {stop.name}
                       </span>
@@ -1431,7 +1410,7 @@ export default function DriverMapView({
                 );
               })}
 
-              {/* 2. Current Stop (Target Stop - Prominent Royal Blue) */}
+              {/* 2. Current Stop (Target Stop - Prominent Royal Blue, Clean without Manifest/Route icon) */}
               {currentStop && (() => {
                 const isOrg = currentStop.isOrg || currentStop.id === 'ORG';
                 const name = isOrg ? (org?.name || 'School / Base Hub') : currentStop.name;
@@ -1439,16 +1418,14 @@ export default function DriverMapView({
                 const stopUsers = isOrg ? [] : processedManifest.filter(u => String(u.pickupPointId) === String(currentStop?.id));
                 const handledCount = isOrg ? 0 : stopUsers.filter((u: any) => u.status === targetStatus || u.status === 'absent').length;
                 const totalCount = isOrg ? 0 : stopUsers.length;
-                const targetLat = isOrg ? org?.location?.lat : currentStop?.lat;
-                const targetLng = isOrg ? org?.location?.lng : currentStop?.lng;
                 const stopNumber = currentStop.originalIndex !== undefined ? currentStop.originalIndex + 1 : (currentIdx + 1);
 
                 return (
                   <div
-                    className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-600/30 border border-blue-400 active:scale-95 transition-all min-w-[190px] max-w-[270px] cursor-pointer"
+                    className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-600/30 border border-blue-400 active:scale-95 transition-all min-w-[170px] max-w-[250px] cursor-pointer"
                     onClick={() => !isOrg && setSelectedStopId(currentStop.id)}
                   >
-                    <div className="w-9 h-9 bg-white text-blue-600 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-md">
+                    <div className="w-8 h-8 bg-white text-blue-600 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-md">
                       {isOrg ? <Shield size={16} /> : `${handledCount}/${totalCount}`}
                     </div>
                     <div className="flex flex-col items-start min-w-0 overflow-hidden flex-1">
@@ -1458,81 +1435,37 @@ export default function DriverMapView({
                           Current {!isOrg && `#${stopNumber}`}
                         </span>
                       </div>
-                      <span className="text-xs font-black uppercase truncate w-full leading-tight">
+                      <span className="text-xs font-black uppercase truncate w-full leading-tight font-extrabold">
                         {name}
                       </span>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0 ml-1" onClick={(e) => e.stopPropagation()}>
-                      {isValidCoordinate(targetLat, targetLng) && (
-                        <button
-                          onClick={() => {
-                            if (mapRef.current && isValidCoordinate(targetLat, targetLng)) {
-                              mapRef.current.flyTo([Number(targetLat), Number(targetLng)], 16);
-                              toast.success(`Centered on ${name}`);
-                            }
-                          }}
-                          className="w-7 h-7 bg-white/20 hover:bg-white text-white hover:text-blue-600 rounded-lg flex items-center justify-center transition-all cursor-pointer"
-                          title="Center on map"
-                        >
-                          <Navigation size={13} />
-                        </button>
-                      )}
-                      {!isOrg && (
-                        <button
-                          onClick={() => setSelectedStopId(currentStop.id)}
-                          className="px-2 py-1 bg-white text-blue-600 hover:bg-blue-50 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs"
-                        >
-                          Manifest
-                        </button>
-                      )}
                     </div>
                   </div>
                 );
               })()}
 
-              {/* 3. Next Stop (Distinct Indigo Styling) */}
+              {/* 3. Next Stop (Distinct Indigo Styling, Clean without Route icon) */}
               {nextStop && (() => {
                 const isOrg = nextStop.isOrg || nextStop.id === 'ORG';
                 const name = isOrg ? (org?.name || 'School / Base Hub') : nextStop.name;
                 const stopUsers = isOrg ? [] : processedManifest.filter(u => String(u.pickupPointId) === String(nextStop?.id));
                 const totalCount = stopUsers.length;
-                const targetLat = isOrg ? org?.location?.lat : nextStop?.lat;
-                const targetLng = isOrg ? org?.location?.lng : nextStop?.lng;
                 const stopNumber = nextStop.originalIndex !== undefined ? nextStop.originalIndex + 1 : (currentIdx + 2);
 
                 return (
                   <div
                     onClick={() => !isOrg && setSelectedStopId(nextStop.id)}
-                    className="flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 bg-indigo-50/95 backdrop-blur-md border-2 border-indigo-300 text-indigo-900 rounded-2xl shadow-sm hover:bg-indigo-100/80 active:scale-95 transition-all min-w-[165px] max-w-[230px] cursor-pointer"
+                    className="flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 bg-indigo-50/95 backdrop-blur-md border-2 border-indigo-300 text-indigo-900 rounded-2xl shadow-sm hover:bg-indigo-100/80 active:scale-95 transition-all min-w-[150px] max-w-[220px] cursor-pointer"
                   >
                     <div className="w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black text-[10px] shrink-0 shadow-xs">
                       {isOrg ? <Shield size={14} /> : `#${stopNumber}`}
                     </div>
                     <div className="flex flex-col items-start min-w-0 overflow-hidden flex-1">
                       <span className="text-[8px] font-black uppercase tracking-wider text-indigo-600 leading-none mb-0.5">
-                        Next Stop {!isOrg && `(${totalCount} wait)`}
+                        Next Stop {!isOrg && `(${totalCount})`}
                       </span>
-                      <span className="text-xs font-black uppercase truncate w-full leading-tight">
+                      <span className="text-xs font-black uppercase truncate w-full leading-tight font-bold">
                         {name}
                       </span>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      {isValidCoordinate(targetLat, targetLng) && (
-                        <button
-                          onClick={() => {
-                            if (mapRef.current && isValidCoordinate(targetLat, targetLng)) {
-                              mapRef.current.flyTo([Number(targetLat), Number(targetLng)], 16);
-                              toast.success(`Previewing ${name}`);
-                            }
-                          }}
-                          className="w-6 h-6 bg-white hover:bg-indigo-100 text-indigo-700 rounded-lg flex items-center justify-center transition-all cursor-pointer border border-indigo-200"
-                          title="Preview on map"
-                        >
-                          <Navigation size={12} />
-                        </button>
-                      )}
                     </div>
                   </div>
                 );
@@ -1610,8 +1543,8 @@ export default function DriverMapView({
                className="bg-white/95 backdrop-blur-3xl w-full max-w-sm mx-auto rounded-[3.5rem] p-6 pb-12 space-y-6 overflow-hidden shadow-[0_50px_100px_rgba(0,0,0,0.3)] pointer-events-auto border border-white/50"
              >
                 {(() => {
-                    const stop = currentRoute?.pickupPoints?.find((p: any) => p.id === selectedStopId);
-                    const stopUsers = processedManifest.filter(u => u.pickupPointId === selectedStopId);
+                    const stop = currentRoute?.pickupPoints?.find((p: any) => String(p.id) === String(selectedStopId));
+                    const stopUsers = processedManifest.filter(u => String(u.pickupPointId) === String(selectedStopId));
                     const isActive = String(activeTrip?.currentStopId) === String(selectedStopId);
                     
                     return (
@@ -1649,7 +1582,7 @@ export default function DriverMapView({
                                     <Navigation size={16} />
                                  </button>
                                )}
-                             <button onClick={() => setSelectedStopId(null)} className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center">
+                             <button onClick={() => setSelectedStopId(null)} className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center cursor-pointer active:scale-95">
                                 <X size={20} />
                              </button>
                            </div>
@@ -1700,15 +1633,11 @@ export default function DriverMapView({
                                     <div className="flex items-center gap-2">
                                         <button 
                                           onClick={() => {
-                                            if (!activeTrip) {
-                                              toast.error("Start the trip first to update member status", { id: 'no-active-trip' });
-                                              return;
-                                            }
                                             const direction = activeTrip?.direction || tripType;
                                             const targetStatus = direction === 'dropoff' ? 'dropped' : 'picked';
                                             updateMemberStatus(user.id, user.status === targetStatus ? 'waiting' : targetStatus);
                                           }}
-                                          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                                          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
                                             (() => {
                                               const direction = activeTrip?.direction || tripType;
                                               const targetStatus = direction === 'dropoff' ? 'dropped' : 'picked';
@@ -1717,22 +1646,20 @@ export default function DriverMapView({
                                               ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
                                               : 'bg-white text-slate-400 border border-slate-100 shadow-sm'
                                           }`}
+                                          title="Mark Boarded / Dropped"
                                         >
                                           <CheckCircle size={18} />
                                        </button>
                                        <button 
                                          onClick={() => {
-                                           if (!activeTrip) {
-                                              toast.error("Start the trip first to update member status", { id: 'no-active-trip' });
-                                              return;
-                                           }
                                            updateMemberStatus(user.id, user.status === 'absent' ? 'waiting' : 'absent');
                                          }}
-                                         className={`px-3 h-9 rounded-xl text-[8px] font-black uppercase transition-all ${
+                                         className={`px-3 h-9 rounded-xl text-[8px] font-black uppercase transition-all cursor-pointer active:scale-95 ${
                                            user.status === 'absent' 
                                              ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' 
                                              : 'bg-white text-slate-400 border border-slate-100 shadow-sm'
                                          }`}
+                                         title="Mark Absent"
                                        >
                                           ABSENT
                                        </button>
