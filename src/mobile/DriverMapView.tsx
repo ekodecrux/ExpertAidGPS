@@ -3,7 +3,7 @@ import MapComponent, { Marker, Popup, Polyline, vehicleIcon, stationIcon, create
 import { useAuth } from '../contexts/AuthContext';
 import { db, auth } from '../lib/firebase';
 import { isValidCoordinate, getSortedStops, getLocalAvatar, getLocalIcon, getUserAvatar } from '../lib/utils';
-import { Activity, Navigation, Play, Target, Square, ChevronRight, MapPin, Truck, Shield, ArrowRightLeft, ArrowUpRight, ArrowDownLeft, Users, X, Clock, Settings as SettingsIcon, CheckCircle, LogOut, XCircle } from 'lucide-react';
+import { Activity, Navigation, Play, Target, Square, ChevronRight, ChevronDown, ChevronUp, Check, CheckCircle2, ChevronsUpDown, MapPin, Truck, Shield, ArrowRightLeft, ArrowUpRight, ArrowDownLeft, Users, X, Clock, Settings as SettingsIcon, CheckCircle, LogOut, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { cn } from '../lib/utils';
@@ -33,6 +33,7 @@ export default function DriverMapView({
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [manifest, setManifest] = useState<any[]>([]);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [isPanelExpanded, setIsPanelExpanded] = useState(true);
   const [selectedRouteId, setSelectedRouteId] = useState<string>('');
   const [tripType, setTripType] = useState<'pickup' | 'dropoff'>('pickup');
   const [loading, setLoading] = useState(true);
@@ -149,6 +150,93 @@ export default function DriverMapView({
   const currentTargetStop = React.useMemo(() => {
     return currentRoute?.pickupPoints?.find((p: any) => String(p.id) === String(activeTrip?.currentStopId));
   }, [currentRoute?.pickupPoints, activeTrip?.currentStopId]);
+
+  const stopsBreakdown = React.useMemo(() => {
+    if (!currentRoute?.pickupPoints || currentRoute.pickupPoints.length === 0) {
+      return {
+        completedStops: [] as any[],
+        currentStop: null as any,
+        nextStop: null as any,
+        upcomingStops: [] as any[],
+        totalStops: 0,
+        completedCount: 0,
+        isOrgCurrent: false,
+        currentIdx: -1,
+      };
+    }
+
+    const direction = activeTrip?.direction || tripType;
+    const isOrgCurrent = activeTrip?.currentStopId === 'ORG';
+    const totalStops = sortedStopsList.length;
+
+    const checkStopHandled = (stop: any) => {
+      const members = processedManifest.filter(u => String(u.pickupPointId) === String(stop.id));
+      return members.length > 0 && members.every(u => isHandled(u, direction));
+    };
+
+    let currentIdx = -1;
+    if (activeTrip?.currentStopId && !isOrgCurrent) {
+      currentIdx = sortedStopsList.findIndex((p: any) => String(p.id) === String(activeTrip.currentStopId));
+    }
+
+    if (currentIdx === -1 && !isOrgCurrent) {
+      const firstUnhandledIdx = sortedStopsList.findIndex(p => !checkStopHandled(p));
+      currentIdx = firstUnhandledIdx !== -1 ? firstUnhandledIdx : 0;
+    }
+
+    const completedStops: any[] = [];
+    let currentStop: any = null;
+    let nextStop: any = null;
+    const upcomingStops: any[] = [];
+
+    if (isOrgCurrent) {
+      completedStops.push(...sortedStopsList.map((s, idx) => ({ ...s, originalIndex: idx })));
+      currentStop = {
+        id: 'ORG',
+        name: org?.name || 'School / Base Hub',
+        isOrg: true,
+        lat: org?.location?.lat,
+        lng: org?.location?.lng,
+        originalIndex: totalStops,
+      };
+      nextStop = null;
+    } else {
+      sortedStopsList.forEach((stop: any, idx: number) => {
+        const withIdx = { ...stop, originalIndex: idx };
+        if (idx < currentIdx) {
+          completedStops.push(withIdx);
+        } else if (idx === currentIdx) {
+          currentStop = withIdx;
+        } else if (idx === currentIdx + 1) {
+          nextStop = withIdx;
+        } else {
+          upcomingStops.push(withIdx);
+        }
+      });
+
+      if (!nextStop && currentIdx === sortedStopsList.length - 1 && direction === 'pickup') {
+        nextStop = {
+          id: 'ORG',
+          name: org?.name || 'School / Base Hub',
+          isOrg: true,
+          lat: org?.location?.lat,
+          lng: org?.location?.lng,
+          originalIndex: totalStops,
+        };
+      }
+    }
+
+    return {
+      completedStops,
+      currentStop,
+      nextStop,
+      upcomingStops,
+      totalStops,
+      completedCount: completedStops.length,
+      isOrgCurrent,
+      currentIdx,
+    };
+  }, [sortedStopsList, activeTrip, tripType, processedManifest, org, currentRoute]);
 
   const targetStopCoords = React.useMemo(() => {
     if (activeTrip?.currentStopId === 'ORG') {
@@ -1270,77 +1358,476 @@ export default function DriverMapView({
 
       </div>
 
-      {/* 3. Bottom Interface Panel (Clean Dedicated Navigation: ONLY Target Stop) */}
-      <div className={`absolute bottom-6 left-4 right-4 z-[2000] transition-all duration-500 ${(activeTrip || currentRoute) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
+      {/* 3. Bottom Interface Panel: Complete Route Stops Tray */}
+      <div className={`absolute bottom-4 sm:bottom-6 left-3 sm:left-4 right-3 sm:right-4 z-[2000] transition-all duration-500 ${(activeTrip || currentRoute) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
         {(() => {
-          const currentStop = currentRoute?.pickupPoints?.find((p: any) => String(p.id) === String(activeTrip?.currentStopId));
-          const isOrg = activeTrip?.currentStopId === 'ORG';
-          const name = isOrg ? (org?.name || 'School / Base Hub') : (currentStop?.name || 'Target Station');
-          const targetStatus = activeTrip?.direction === 'dropoff' ? 'dropped' : 'picked';
-          const stopUsers = isOrg ? [] : processedManifest.filter(u => String(u.pickupPointId) === String(currentStop?.id));
-          const handledCount = isOrg ? 0 : stopUsers.filter((u: any) => u.status === targetStatus || u.status === 'absent').length;
-          const totalCount = isOrg ? 0 : stopUsers.length;
-          const targetLat = isOrg ? org?.location?.lat : currentStop?.lat;
-          const targetLng = isOrg ? org?.location?.lng : currentStop?.lng;
+          const { completedStops, currentStop, nextStop, upcomingStops, totalStops, completedCount, isOrgCurrent, currentIdx } = stopsBreakdown;
+          const routeTitle = currentRoute?.name || 'Active Route';
+          const direction = activeTrip?.direction || tripType;
 
           return (
-            <div className="bg-white/95 backdrop-blur-2xl rounded-3xl p-3.5 sm:p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] border border-white/60 flex items-center justify-between gap-3">
+            <div className="bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] border border-white/70 overflow-hidden flex flex-col transition-all">
+              {/* Tray Header Bar with Expand/Collapse & Progress */}
               <div 
-                className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
-                onClick={() => {
-                  if (currentStop) setSelectedStopId(currentStop.id);
-                }}
+                className="px-4 py-2.5 bg-slate-900/90 text-white flex items-center justify-between cursor-pointer select-none border-b border-slate-800"
+                onClick={() => setIsPanelExpanded(!isPanelExpanded)}
               >
-                <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-blue-500/30 shrink-0">
-                  {isOrg ? <Shield size={22} /> : <MapPin size={22} />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[8px] font-black uppercase tracking-wider rounded-md">
-                      Target Stop
-                    </span>
-                    {!isOrg && (
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate">
-                        {handledCount}/{totalCount} Processed
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-white truncate">
+                        {routeTitle}
                       </span>
-                    )}
+                      <span className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest rounded-md ${
+                        direction === 'dropoff' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                      }`}>
+                        {direction === 'dropoff' ? 'Dropoff' : 'Pickup'}
+                      </span>
+                    </div>
                   </div>
-                  <h3 className="text-sm sm:text-base font-black text-slate-900 uppercase italic truncate leading-tight">
-                    {name}
-                  </h3>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                    {activeTrip?.direction === 'dropoff' ? 'Next Dropoff Stop' : 'Next Pickup Stop'}
-                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] font-bold text-slate-300">
+                    {completedCount} / {totalStops} Stops Handled
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsPanelExpanded(!isPanelExpanded);
+                    }}
+                    className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center transition-all active:scale-95"
+                    title={isPanelExpanded ? "Minimize stops panel" : "Expand all stops"}
+                    aria-label={isPanelExpanded ? "Minimize stops panel" : "Expand all stops"}
+                  >
+                    {isPanelExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                  </button>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 shrink-0">
-                {isValidCoordinate(targetLat, targetLng) && (
-                  <button
-                    onClick={() => {
-                      if (mapRef.current && isValidCoordinate(targetLat, targetLng)) {
-                        mapRef.current.flyTo([Number(targetLat), Number(targetLng)], 16);
-                        toast.success(`Centered on ${name}`);
-                      }
-                    }}
-                    className="w-10 h-10 sm:w-11 sm:h-11 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 rounded-2xl flex items-center justify-center transition-all active:scale-95 border border-slate-200/60 shadow-xs cursor-pointer"
-                    title="Center on Target Stop"
-                  >
-                    <Navigation size={18} />
-                  </button>
-                )}
+              {/* Minimized Mode: Compact Quick HUD */}
+              {!isPanelExpanded && currentStop && (() => {
+                const isOrg = currentStop.isOrg || currentStop.id === 'ORG';
+                const name = isOrg ? (org?.name || 'School / Base Hub') : currentStop.name;
+                const targetLat = isOrg ? org?.location?.lat : currentStop.lat;
+                const targetLng = isOrg ? org?.location?.lng : currentStop.lng;
+                const stopNumber = currentStop.originalIndex !== undefined ? currentStop.originalIndex + 1 : (currentIdx + 1);
 
-                {!isOrg && currentStop && (
-                  <button
-                    onClick={() => setSelectedStopId(currentStop.id)}
-                    className="px-3.5 sm:px-4 py-2.5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-md hover:bg-blue-700 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Users size={14} />
-                    <span>Manifest</span>
-                  </button>
-                )}
-              </div>
+                return (
+                  <div className="p-3.5 flex items-center justify-between gap-3">
+                    <div 
+                      className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                      onClick={() => {
+                        if (!isOrg && currentStop) setSelectedStopId(currentStop.id);
+                      }}
+                    >
+                      <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md shadow-blue-500/25 shrink-0">
+                        {isOrg ? <Shield size={20} /> : <MapPin size={20} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[8px] font-black uppercase tracking-wider rounded-md">
+                            Current {!isOrg && `#${stopNumber}`}
+                          </span>
+                          {nextStop && (
+                            <span className="text-[9px] font-semibold text-slate-400 truncate">
+                              Next: {nextStop.name}
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="text-sm font-black text-slate-900 uppercase truncate">
+                          {name}
+                        </h4>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isValidCoordinate(targetLat, targetLng) && (
+                        <button
+                          onClick={() => {
+                            if (mapRef.current && isValidCoordinate(targetLat, targetLng)) {
+                              mapRef.current.flyTo([Number(targetLat), Number(targetLng)], 16);
+                              toast.success(`Centered on ${name}`);
+                            }
+                          }}
+                          className="w-10 h-10 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 rounded-2xl flex items-center justify-center transition-all border border-slate-200"
+                          title="Center on current stop"
+                        >
+                          <Navigation size={17} />
+                        </button>
+                      )}
+                      {!isOrg && (
+                        <button
+                          onClick={() => setSelectedStopId(currentStop.id)}
+                          className="px-3.5 py-2.5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-wider shadow-md hover:bg-blue-700 transition-all flex items-center gap-1.5"
+                        >
+                          <Users size={14} />
+                          <span>Manifest</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Full Expanded Stops Tray */}
+              {isPanelExpanded && (
+                <div className="max-h-[55vh] sm:max-h-[60vh] overflow-y-auto p-3.5 sm:p-4 space-y-3.5 custom-scrollbar">
+
+                  {/* 1. AT THE STARTING: COMPLETED STOPS (WITH EXPAND / COLLAPSE ICON) */}
+                  {completedStops.length > 0 && (
+                    <div className="bg-emerald-50/80 border border-emerald-200/90 rounded-2xl overflow-hidden transition-all duration-300">
+                      <div 
+                        className="p-3 flex items-center justify-between cursor-pointer hover:bg-emerald-100/60 transition-colors select-none"
+                        onClick={() => setShowCompleted(!showCompleted)}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                            <CheckCircle2 size={18} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black uppercase text-emerald-950 tracking-wide">
+                                Completed Stops
+                              </span>
+                              <span className="px-2 py-0.5 bg-emerald-200 text-emerald-800 text-[10px] font-black rounded-full">
+                                {completedStops.length} done
+                              </span>
+                            </div>
+                            <p className="text-[10px] font-semibold text-emerald-800 truncate">
+                              {showCompleted ? 'Tap to collapse completed list' : `${completedStops.map((s: any) => s.name).join(', ')}`}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Expand / Collapse Icon Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowCompleted(!showCompleted);
+                          }}
+                          className="w-8 h-8 rounded-xl bg-white/90 hover:bg-white text-emerald-800 flex items-center justify-center shadow-xs transition-all active:scale-95 shrink-0 ml-2 cursor-pointer"
+                          title={showCompleted ? "Collapse completed stops" : "Expand completed stops"}
+                          aria-label={showCompleted ? "Collapse completed stops" : "Expand completed stops"}
+                        >
+                          {showCompleted ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </button>
+                      </div>
+
+                      {/* Expanded Completed Stops List */}
+                      {showCompleted && (
+                        <div className="border-t border-emerald-200/70 p-2.5 space-y-2 bg-emerald-50/40">
+                          {completedStops.map((stop: any, cIdx: number) => {
+                            const stopUsers = processedManifest.filter(u => String(u.pickupPointId) === String(stop?.id));
+                            const handledCount = stopUsers.filter((u: any) => u.status === (direction === 'dropoff' ? 'dropped' : 'picked') || u.status === 'absent').length;
+                            const totalCount = stopUsers.length;
+                            const stopNum = stop.originalIndex !== undefined ? stop.originalIndex + 1 : cIdx + 1;
+
+                            return (
+                              <div 
+                                key={`completed-${stop.id}-${cIdx}`}
+                                className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 flex items-center justify-between gap-2 shadow-xs"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 text-[10px] font-black flex items-center justify-center shrink-0">
+                                    ✓ #{stopNum}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="text-xs font-black text-slate-800 uppercase truncate">
+                                      {stop.name}
+                                    </h4>
+                                    <div className="flex items-center gap-2 text-[10px] text-emerald-700 font-semibold">
+                                      <span>{handledCount}/{totalCount} Processed</span>
+                                      <span>·</span>
+                                      <span className="uppercase text-[9px] font-bold text-emerald-600">Completed</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {isValidCoordinate(stop.lat, stop.lng) && (
+                                    <button
+                                      onClick={() => {
+                                        if (mapRef.current) {
+                                          mapRef.current.flyTo([Number(stop.lat), Number(stop.lng)], 16);
+                                          toast.success(`Centered on ${stop.name}`);
+                                        }
+                                      }}
+                                      className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                      title="Center on map"
+                                    >
+                                      <Navigation size={14} />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => setSelectedStopId(stop.id)}
+                                    className="px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                  >
+                                    Manifest
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 2. CURRENT STOP (TARGET STOP) */}
+                  {currentStop && (() => {
+                    const isOrg = currentStop.isOrg || currentStop.id === 'ORG';
+                    const name = isOrg ? (org?.name || 'School / Base Hub') : currentStop.name;
+                    const targetStatus = direction === 'dropoff' ? 'dropped' : 'picked';
+                    const stopUsers = isOrg ? [] : processedManifest.filter(u => String(u.pickupPointId) === String(currentStop?.id));
+                    const handledCount = isOrg ? 0 : stopUsers.filter((u: any) => u.status === targetStatus || u.status === 'absent').length;
+                    const totalCount = isOrg ? 0 : stopUsers.length;
+                    const targetLat = isOrg ? org?.location?.lat : currentStop?.lat;
+                    const targetLng = isOrg ? org?.location?.lng : currentStop?.lng;
+                    const stopNumber = currentStop.originalIndex !== undefined ? currentStop.originalIndex + 1 : (currentIdx + 1);
+
+                    return (
+                      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 text-white shadow-xl shadow-blue-500/25 border border-blue-400/40 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+
+                        <div className="flex items-start justify-between gap-3 relative z-10">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-12 h-12 rounded-2xl bg-white text-blue-600 flex items-center justify-center font-black text-sm shadow-md shrink-0">
+                              {isOrg ? <Shield size={24} /> : <MapPin size={24} />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-white/20 backdrop-blur-md text-white text-[9px] font-black uppercase tracking-wider rounded-lg border border-white/20">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  Current Stop {!isOrg && `#${stopNumber}`}
+                                </span>
+                                {!isOrg && totalCount > 0 && (
+                                  <span className="text-[10px] font-bold text-blue-100 tracking-wide">
+                                    {handledCount}/{totalCount} Processed
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-tight leading-snug break-words">
+                                {name}
+                              </h3>
+                              <p className="text-[9px] font-medium text-blue-100 uppercase tracking-wider mt-0.5">
+                                {isOrg ? 'Final Destination Hub' : (direction === 'dropoff' ? 'Next Dropoff Stop' : 'Next Pickup Stop')}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isValidCoordinate(targetLat, targetLng) && (
+                              <button
+                                onClick={() => {
+                                  if (mapRef.current && isValidCoordinate(targetLat, targetLng)) {
+                                    mapRef.current.flyTo([Number(targetLat), Number(targetLng)], 16);
+                                    toast.success(`Centered on ${name}`);
+                                  }
+                                }}
+                                className="w-10 h-10 sm:w-11 sm:h-11 bg-white/20 hover:bg-white text-white hover:text-blue-600 rounded-2xl flex items-center justify-center transition-all active:scale-95 border border-white/25 shadow-xs cursor-pointer"
+                                title="Center on Target Stop"
+                              >
+                                <Navigation size={18} />
+                              </button>
+                            )}
+
+                            {!isOrg && (
+                              <button
+                                onClick={() => setSelectedStopId(currentStop.id)}
+                                className="px-3.5 sm:px-4 py-2.5 bg-white text-blue-700 hover:bg-blue-50 rounded-2xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Users size={14} />
+                                <span>Manifest</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 3. NEXT STOP */}
+                  {nextStop && (() => {
+                    const isOrg = nextStop.isOrg || nextStop.id === 'ORG';
+                    const name = isOrg ? (org?.name || 'School / Base Hub') : nextStop.name;
+                    const stopUsers = isOrg ? [] : processedManifest.filter(u => String(u.pickupPointId) === String(nextStop?.id));
+                    const totalCount = stopUsers.length;
+                    const targetLat = isOrg ? org?.location?.lat : nextStop?.lat;
+                    const targetLng = isOrg ? org?.location?.lng : nextStop?.lng;
+                    const stopNumber = nextStop.originalIndex !== undefined ? nextStop.originalIndex + 1 : (currentIdx + 2);
+
+                    return (
+                      <div className="bg-slate-50/90 hover:bg-indigo-50/60 border-2 border-indigo-200/80 rounded-2xl p-3 sm:p-3.5 transition-all shadow-xs">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-xs shadow-md shadow-indigo-500/20 shrink-0">
+                              {isOrg ? <Shield size={18} /> : <MapPin size={18} />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[9px] font-black uppercase tracking-wider rounded-md">
+                                  Next Stop {!isOrg && `#${stopNumber}`}
+                                </span>
+                                {!isOrg && totalCount > 0 && (
+                                  <span className="text-[10px] font-bold text-slate-500">
+                                    {totalCount} waiting
+                                  </span>
+                                )}
+                              </div>
+                              <h4 className="text-xs sm:text-sm font-black text-slate-900 uppercase leading-snug break-words">
+                                {name}
+                              </h4>
+                              <p className="text-[9px] font-semibold text-indigo-600 uppercase tracking-wider">
+                                Up next in route sequence
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isValidCoordinate(targetLat, targetLng) && (
+                              <button
+                                onClick={() => {
+                                  if (mapRef.current && isValidCoordinate(targetLat, targetLng)) {
+                                    mapRef.current.flyTo([Number(targetLat), Number(targetLng)], 16);
+                                    toast.success(`Previewing next stop: ${name}`);
+                                  }
+                                }}
+                                className="w-9 h-9 bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-xl flex items-center justify-center border border-slate-200 shadow-xs transition-all active:scale-95"
+                                title="Center on Next Stop"
+                              >
+                                <Navigation size={15} />
+                              </button>
+                            )}
+
+                            {!isOrg && (
+                              <button
+                                onClick={() => setSelectedStopId(nextStop.id)}
+                                className="px-2.5 sm:px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95"
+                              >
+                                <Users size={13} />
+                                <span>Manifest</span>
+                              </button>
+                            )}
+
+                            {!isOrg && activeTrip && (
+                              <button
+                                onClick={() => handleUpdateStop(nextStop.id)}
+                                className="px-2 py-2 bg-slate-200 hover:bg-blue-600 hover:text-white text-slate-700 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all active:scale-95"
+                                title="Advance directly to this stop"
+                              >
+                                Target
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 4. UPCOMING STOPS IN ROUTE ORDER */}
+                  {upcomingStops.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Upcoming Stops ({upcomingStops.length})
+                        </span>
+                        <span className="text-[9px] font-semibold text-slate-400">
+                          In Route Order
+                        </span>
+                      </div>
+
+                      {upcomingStops.map((stop: any, uIdx: number) => {
+                        const stopUsers = processedManifest.filter(u => String(u.pickupPointId) === String(stop?.id));
+                        const totalCount = stopUsers.length;
+                        const stopNumber = stop.originalIndex !== undefined ? stop.originalIndex + 1 : (uIdx + currentIdx + 3);
+
+                        return (
+                          <div 
+                            key={`upcoming-${stop.id}-${uIdx}`}
+                            className="bg-white/80 hover:bg-white border border-slate-200/80 rounded-2xl p-2.5 sm:p-3 flex items-center justify-between gap-2 transition-all shadow-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <span className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-black flex items-center justify-center shrink-0">
+                                #{stopNumber}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-xs sm:text-sm font-black text-slate-800 uppercase truncate">
+                                  {stop.name}
+                                </h4>
+                                <p className="text-[9px] font-semibold text-slate-400">
+                                  {totalCount} {direction === 'dropoff' ? 'passengers' : 'waiting'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isValidCoordinate(stop.lat, stop.lng) && (
+                                <button
+                                  onClick={() => {
+                                    if (mapRef.current) {
+                                      mapRef.current.flyTo([Number(stop.lat), Number(stop.lng)], 16);
+                                      toast.success(`Centered on ${stop.name}`);
+                                    }
+                                  }}
+                                  className="p-1.5 rounded-xl text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                  title="Center on map"
+                                >
+                                  <Navigation size={14} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setSelectedStopId(stop.id)}
+                                className="px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                              >
+                                Manifest
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 5. FINAL BASE DESTINATION (If pickup route heading to school/hub) */}
+                  {direction === 'pickup' && !isOrgCurrent && (
+                    <div className="bg-slate-100/70 border border-slate-200/60 rounded-2xl p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                          <Shield size={14} />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
+                            Final Destination
+                          </span>
+                          <h5 className="text-xs font-black text-slate-800 uppercase truncate">
+                            {org?.name || 'School / Base Hub'}
+                          </h5>
+                        </div>
+                      </div>
+                      {org?.location && isValidCoordinate(org.location.lat, org.location.lng) && (
+                        <button
+                          onClick={() => {
+                            if (mapRef.current) {
+                              mapRef.current.flyTo([Number(org.location.lat), Number(org.location.lng)], 16);
+                              toast.success(`Centered on Base Hub`);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 transition-colors"
+                          title="View Hub on map"
+                        >
+                          <Navigation size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+              )}
             </div>
           );
         })()}
